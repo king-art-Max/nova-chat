@@ -386,6 +386,41 @@ async function startServer() {
     });
   });
 
+  // 诊断接口
+  app.get('/api/debug/ai', async (req, res) => {
+    const hasKey = !!process.env.DEEPSEEK_API_KEY;
+    const keyPrefix = hasKey ? process.env.DEEPSEEK_API_KEY.substring(0, 8) + '...' : 'NOT SET';
+    
+    let apiResult = 'not tested';
+    if (hasKey) {
+      try {
+        const response = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + process.env.DEEPSEEK_API_KEY
+          },
+          body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: [{ role: 'user', content: 'hi' }],
+            stream: false
+          })
+        });
+        const data = await response.json();
+        apiResult = data.error ? 'ERROR: ' + data.error.message : 'OK: ' + (data.choices?.[0]?.message?.content || '').substring(0, 50);
+      } catch (e) {
+        apiResult = 'FETCH_ERROR: ' + e.message;
+      }
+    }
+    
+    res.json({
+      hasKey,
+      keyPrefix,
+      nodeVersion: process.version,
+      apiResult
+    });
+  });
+
   // ==================== Socket.io 事件处理 ====================
 
   io.on('connection', (socket) => {
