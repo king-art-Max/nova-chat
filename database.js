@@ -934,3 +934,211 @@ module.exports = {
   hasClaimedRedPacket,
   updateBalance
 };
+
+// ==================== AI公司群组数据库操作 ====================
+
+async function getAIPersonasByGalNumbers(galNumbers) {
+  const placeholders = galNumbers.map(() => '?').join(',');
+  return await queryAll(
+    `SELECT * FROM ai_personas WHERE gal_number IN (${placeholders})`,
+    galNumbers
+  );
+}
+
+async function updateChatGroupMode(chatId, groupMode, description) {
+  return await runSql(
+    'UPDATE chats SET group_mode = ?, description = ? WHERE id = ?',
+    [groupMode, description, chatId]
+  );
+}
+
+async function updateChat(chatId, updates) {
+  const allowed = ['name', 'group_mode', 'description', 'join_method', 'invite_code', 'announcement', 'is_muted'];
+  const keys = Object.keys(updates).filter(k => allowed.includes(k));
+  if (keys.length === 0) return false;
+  
+  const sets = keys.map(k => `${k} = ?`).join(', ');
+  const values = keys.map(k => updates[k]);
+  values.push(chatId);
+  
+  const result = await runSql(`UPDATE chats SET ${sets} WHERE id = ?`, values);
+  return result.changes > 0;
+}
+
+async function updateChatMemberRole(chatId, userId, role) {
+  const result = await runSql(
+    'UPDATE chat_members SET role = ? WHERE chat_id = ? AND user_id = ?',
+    [role, chatId, userId]
+  );
+  return result.changes > 0;
+}
+
+async function removeChatMember(chatId, userId) {
+  const result = await runSql(
+    'DELETE FROM chat_members WHERE chat_id = ? AND user_id = ?',
+    [chatId, userId]
+  );
+  return result.changes > 0;
+}
+
+async function createMeeting(chatId, hostId, title) {
+  const result = await runInsert(
+    'INSERT INTO meetings (chat_id, host_id, title) VALUES (?, ?, ?)',
+    [chatId, hostId, title]
+  );
+  return result.lastInsertRowid;
+}
+
+async function getMeetings(chatId) {
+  return await queryAll(
+    'SELECT * FROM meetings WHERE chat_id = ? ORDER BY created_at DESC',
+    [chatId]
+  );
+}
+
+async function getStarredContacts(userId) {
+  return await queryAll(
+    `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key, c.is_starred
+     FROM contacts c
+     JOIN users u ON c.contact_id = u.id
+     WHERE c.user_id = ? AND c.is_starred = 1 AND c.status = 'accepted'`,
+    [userId]
+  );
+}
+
+async function getChatById(chatId) {
+  return await queryOne('SELECT * FROM chats WHERE id = ?', [chatId]);
+}
+
+async function getChatByInviteCode(inviteCode) {
+  return await queryOne('SELECT * FROM chats WHERE invite_code = ?', [inviteCode]);
+}
+
+// ==================== PostgreSQL新增表 ====================
+async function createAdditionalTables() {
+  // AI公司会议表
+  await pool.query(`CREATE TABLE IF NOT EXISTS meetings (
+    id SERIAL PRIMARY KEY,
+    chat_id INTEGER REFERENCES chats(id),
+    host_id INTEGER REFERENCES users(id),
+    title VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  
+  // chats表新增字段
+  await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS group_mode VARCHAR(20) DEFAULT 'open'`);
+  await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS description TEXT`);
+  await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS join_method VARCHAR(20) DEFAULT 'invite'`);
+  await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS invite_code VARCHAR(20)`);
+  await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS announcement TEXT`);
+  await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS is_muted BOOLEAN DEFAULT FALSE`);
+}
+
+// ==================== SQLite新增表 ====================
+async function createAdditionalTablesSQLite() {
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS meetings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER,
+    host_id INTEGER,
+    title TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  
+  try { sqlDb.run(`ALTER TABLE chats ADD COLUMN group_mode TEXT DEFAULT 'open'`); } catch(e) {}
+  try { sqlDb.run(`ALTER TABLE chats ADD COLUMN description TEXT`); } catch(e) {}
+  try { sqlDb.run(`ALTER TABLE chats ADD COLUMN join_method TEXT DEFAULT 'invite'`); } catch(e) {}
+  try { sqlDb.run(`ALTER TABLE chats ADD COLUMN invite_code TEXT`); } catch(e) {}
+  try { sqlDb.run(`ALTER TABLE chats ADD COLUMN announcement TEXT`); } catch(e) {}
+  try { sqlDb.run(`ALTER TABLE chats ADD COLUMN is_muted INTEGER DEFAULT 0`); } catch(e) {}
+}
+
+// 修改initDatabase函数末尾添加新表创建
+const originalInit = initDatabase;
+initDatabase = async function() {
+  await originalInit();
+  if (isProduction) {
+    await createAdditionalTables();
+  } else {
+    await createAdditionalTablesSQLite();
+  }
+};
+
+// ==================== AI公司岗位人格初始化 ====================
+const AI_COMPANY_PERSONAS = [
+  {
+    gal_number: 'AI-CEO000005',
+    name: '总经理',
+    avatar: 'robot',
+    system_prompt: `你是公司的总经理。你负责公司的战略决策和日常管理。在会议中，你主持讨论，分配任务，听取汇报后做出决策。说话风格：沉稳、有条理、有决断力。每次发言控制在100字以内。`
+  },
+  {
+    gal_number: 'AI-CFO000006',
+    name: '财务总监',
+    avatar: 'chart',
+    system_prompt: `你是公司的财务总监。你负责财务分析、预算管理和投资决策。在汇报时提供具体的财务数据和趋势分析。说话风格：严谨、数据驱动、注重ROI。每次发言控制在100字以内。`
+  },
+  {
+    gal_number: 'AI-COO000007',
+    name: '运营总监',
+    avatar: 'robot',
+    system_prompt: `你是公司的运营总监。你负责运营策略、流程优化和团队管理。汇报运营KPI和改进方案。说话风格：务实、高效、结果导向。每次发言控制在100字以内。`
+  },
+  {
+    gal_number: 'AI-CMO000008',
+    name: '市场总监',
+    avatar: 'heart',
+    system_prompt: `你是公司的市场总监。你负责市场推广、品牌策略和用户增长。汇报市场动态和营销效果。说话风格：有创意、洞察力强、善于讲故事。每次发言控制在100字以内。`
+  },
+  {
+    gal_number: 'AI-CTO000009',
+    name: '技术总监',
+    avatar: 'robot',
+    system_prompt: `你是公司的技术总监。你负责技术方案、架构决策和研发管理。汇报技术进展和技术风险。说话风格：技术权威、前瞻性、注重可落地性。每次发言控制在100字以内。`
+  },
+  {
+    gal_number: 'AI-LAW000010',
+    name: '法务顾问',
+    avatar: 'robot',
+    system_prompt: `你是公司的法务顾问。你负责法律合规、合同审查和风险评估。在会议中提供法律意见和风险提示。说话风格：严谨、专业、审慎。每次发言控制在80字以内。`
+  },
+  {
+    gal_number: 'AI-AUD000011',
+    name: '监督官',
+    avatar: 'robot',
+    system_prompt: `你是公司的独立监督官。你的职责是监督各部门工作质量，发现问题并提出改进建议。你不属于任何部门，直接向总经理负责。在会议最后发言，客观评价各部门表现。说话风格：犀利、公正、一针见血。每次发言控制在100字以内。`
+  }
+];
+
+// 插入AI公司人格
+async function initAICompanyPersonas() {
+  for (const persona of AI_COMPANY_PERSONAS) {
+    try {
+      await runSql(
+        'INSERT OR IGNORE INTO ai_personas (gal_number, name, avatar, system_prompt) VALUES (?, ?, ?, ?)',
+        [persona.gal_number, persona.name, persona.avatar, persona.system_prompt]
+      );
+    } catch (e) {
+      // 忽略重复插入错误
+    }
+  }
+  console.log('✅ AI公司岗位人格初始化完成');
+}
+
+// 修改initAIPersonas函数末尾添加AI公司人格
+const originalInitAI = initAIPersonas;
+initAIPersonas = async function() {
+  await originalInitAI();
+  await initAICompanyPersonas();
+};
+
+// 导出新函数
+module.exports.getAIPersonasByGalNumbers = getAIPersonasByGalNumbers;
+module.exports.updateChatGroupMode = updateChatGroupMode;
+module.exports.updateChat = updateChat;
+module.exports.updateChatMemberRole = updateChatMemberRole;
+module.exports.removeChatMember = removeChatMember;
+module.exports.createMeeting = createMeeting;
+module.exports.getMeetings = getMeetings;
+module.exports.getStarredContacts = getStarredContacts;
+module.exports.getChatById = getChatById;
+module.exports.getChatByInviteCode = getChatByInviteCode;

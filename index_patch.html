@@ -1,0 +1,237 @@
+    <!-- 我的收藏页面 -->
+    <div class="page hidden" id="page-starred">
+      <div class="page-header">
+        <button class="btn-icon btn-back" id="btn-starred-back">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+        <h2>我的收藏</h2>
+      </div>
+      <div class="starred-list" id="starred-list">
+        <div class="empty-state"><p>暂无收藏的联系人</p><p>点击联系人旁边的❤️添加收藏</p></div>
+      </div>
+    </div>
+
+    <!-- 群组设置页面 -->
+    <div class="page hidden" id="page-group-settings">
+      <div class="page-header">
+        <button class="btn-icon btn-back" id="btn-group-back">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+        <h2 id="group-settings-title">群组设置</h2>
+      </div>
+      <div class="group-settings-content">
+        <div class="group-info-section">
+          <div class="group-avatar" id="group-avatar">👥</div>
+          <input type="text" id="group-name-edit" class="group-name-input" placeholder="群组名称">
+          <textarea id="group-desc-edit" class="group-desc-input" placeholder="群组介绍（可选）"></textarea>
+        </div>
+        
+        <div class="group-mode-section">
+          <h3>群模式</h3>
+          <div class="mode-options">
+            <button class="mode-btn" data-mode="open">
+              <span class="mode-icon">🟢</span>
+              <span class="mode-name">开放群</span>
+              <span class="mode-desc">任何人可自由发言</span>
+            </button>
+            <button class="mode-btn" data-mode="meeting">
+              <span class="mode-icon">🔵</span>
+              <span class="mode-name">会议群</span>
+              <span class="mode-desc">仅管理员发言，成员旁听</span>
+            </button>
+            <button class="mode-btn" data-mode="quiet">
+              <span class="mode-icon">🟣</span>
+              <span class="mode-name">防互扰群</span>
+              <span class="mode-desc">成员间不可私聊</span>
+            </button>
+          </div>
+        </div>
+        
+        <div class="group-announcement-section">
+          <h3>群公告</h3>
+          <textarea id="group-announcement" class="announcement-input" placeholder="编辑群公告..."></textarea>
+        </div>
+        
+        <div class="group-members-section">
+          <h3>群成员 (<span id="member-count">0</span>)</h3>
+          <div class="members-list" id="members-list"></div>
+        </div>
+        
+        <div class="group-actions">
+          <button class="btn btn-secondary" id="btn-generate-invite">📤 生成邀请码</button>
+          <button class="btn btn-primary" id="btn-save-group-settings">保存设置</button>
+        </div>
+        
+        <div class="invite-code-section hidden" id="invite-code-section">
+          <h3>邀请码</h3>
+          <div class="invite-code-display" id="invite-code-display"></div>
+          <p class="invite-hint">分享邀请码，好友可加入群组</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 创建AI公司弹窗 -->
+    <div id="ai-company-modal" class="modal hidden">
+      <div class="modal-content ai-company-modal">
+        <div class="modal-header">
+          <h3>🤖 创建AI公司</h3>
+          <button class="btn-icon" id="btn-close-ai-company">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>公司名称</label>
+            <input type="text" id="ai-company-name" placeholder="例如：星辰科技">
+          </div>
+          <div class="form-group">
+            <label>所属行业</label>
+            <select id="ai-company-industry">
+              <option value="科技">科技</option>
+              <option value="金融">金融</option>
+              <option value="医疗">医疗</option>
+              <option value="教育">教育</option>
+              <option value="零售">零售</option>
+              <option value="制造">制造</option>
+              <option value="咨询">咨询</option>
+              <option value="综合">综合</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>选择AI岗位</label>
+            <p class="hint-text">选择加入公司的AI岗位（至少选择1个）</p>
+            <div class="ai-role-grid">
+              <label class="ai-role-option">
+                <input type="checkbox" name="ai-role" value="AI-CEO000005">
+                <div class="ai-role-card">
+                  <span class="ai-role-icon">🤵</span>
+                  <span class="ai-role-name">总经理</span>
+                  <span class="ai-role-desc">战略决策、会议主持</span>
+                </div>
+              </label>
+              <label class="ai-role-option">
+                <input type="checkbox" name="ai-role" value="AI-CFO000006">
+                <div class="ai-role-card">
+                  <span class="ai-role-icon">📊</span>
+                  <span class="ai-role-name">财务总监</span>
+                  <span class="ai-role-desc">财务分析、预算管理</span>
+                </div>
+              </label>
+              <label class="ai-role-option">
+                <input type="checkbox" name="ai-role" value="AI-COO000007">
+                <div class="ai-role-card">
+                  <span class="ai-role-icon">💼</span>
+                  <span class="ai-role-name">运营总监</span>
+                  <span class="ai-role-desc">运营策略、流程优化</span>
+                </div>
+              </label>
+              <label class="ai-role-option">
+                <input type="checkbox" name="ai-role" value="AI-CMO000008">
+                <div class="ai-role-card">
+                  <span class="ai-role-icon">📢</span>
+                  <span class="ai-role-name">市场总监</span>
+                  <span class="ai-role-desc">市场推广、品牌策略</span>
+                </div>
+              </label>
+              <label class="ai-role-option">
+                <input type="checkbox" name="ai-role" value="AI-CTO000009">
+                <div class="ai-role-card">
+                  <span class="ai-role-icon">💻</span>
+                  <span class="ai-role-name">技术总监</span>
+                  <span class="ai-role-desc">技术方案、架构决策</span>
+                </div>
+              </label>
+              <label class="ai-role-option">
+                <input type="checkbox" name="ai-role" value="AI-LAW000010">
+                <div class="ai-role-card">
+                  <span class="ai-role-icon">⚖️</span>
+                  <span class="ai-role-name">法务顾问</span>
+                  <span class="ai-role-desc">法律合规、风险评估</span>
+                </div>
+              </label>
+              <label class="ai-role-option">
+                <input type="checkbox" name="ai-role" value="AI-AUD000011">
+                <div class="ai-role-card">
+                  <span class="ai-role-icon">👁️</span>
+                  <span class="ai-role-name">监督官</span>
+                  <span class="ai-role-desc">监督质量、提出建议</span>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" id="btn-confirm-ai-company">创建公司</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI会议弹窗 -->
+    <div id="ai-meeting-modal" class="modal hidden">
+      <div class="modal-content ai-meeting-modal">
+        <div class="modal-header">
+          <h3>📋 AI公司会议</h3>
+          <button class="btn-icon" id="btn-close-meeting">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="meeting-content" id="meeting-content">
+            <p class="meeting-hint">点击下方按钮，召开AI公司会议</p>
+          </div>
+          <div class="meeting-actions">
+            <button class="btn btn-primary" id="btn-start-meeting">📢 召开会议</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 关于Nova-OS弹窗 -->
+    <div id="about-modal" class="modal hidden">
+      <div class="modal-content about-modal">
+        <div class="modal-header">
+          <h3>关于 Nova-OS</h3>
+          <button class="btn-icon" id="btn-close-about">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+        <div class="modal-body about-content">
+          <div class="about-logo">
+            <svg viewBox="0 0 100 100" width="80" height="80">
+              <circle cx="50" cy="50" r="45" fill="none" stroke="var(--accent-blue)" stroke-width="2"/>
+              <circle cx="50" cy="50" r="35" fill="none" stroke="var(--accent-purple)" stroke-width="2" opacity="0.6"/>
+              <circle cx="50" cy="50" r="8" fill="var(--accent-blue)"/>
+            </svg>
+          </div>
+          <h2>Nova-OS</h2>
+          <p class="version">星尘聊天系统 v3.0</p>
+          <div class="about-desc">
+            <p>一款基于Web的加密即时通讯应用，采用端到端加密技术保护您的隐私。</p>
+          </div>
+          <div class="tech-stack">
+            <h4>技术架构</h4>
+            <div class="tech-items">
+              <span class="tech-item">🖥️ Node.js</span>
+              <span class="tech-item">⚡ Express</span>
+              <span class="tech-item">🔌 Socket.io</span>
+              <span class="tech-item">💾 PostgreSQL</span>
+              <span class="tech-item">🔒 AES-256</span>
+              <span class="tech-item">🤖 AI</span>
+            </div>
+          </div>
+          <div class="about-features">
+            <h4>核心功能</h4>
+            <ul>
+              <li>✅ 端到端加密聊天</li>
+              <li>✅ 群组聊天与管理</li>
+              <li>✅ AI助手对话</li>
+              <li>✅ AI公司群组</li>
+              <li>✅ 超级商业群组</li>
+              <li>✅ 星币红包系统</li>
+              <li>✅ 阅后即焚</li>
+              <li>✅ 匿踪模式</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>

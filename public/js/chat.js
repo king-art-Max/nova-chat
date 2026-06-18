@@ -1538,3 +1538,439 @@ window.registerSocketEvents = registerSocketEvents;
 
 // 导出聊天模块
 window.Chat = Chat;
+
+// ==================== V3.0 工具栏增强功能 ====================
+
+// 表情分类数据
+const EMOJI_CATEGORIES = {
+  '常用': ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤔','🤭','🤫','🤥'],
+  '手势': ['👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️'],
+  '心形': ['💋','💌','💘','💝','💖','💗','💓','💞','💕','💟','❣','💔','❤️','🧡','💛','💚','💙','💜','🤎','🖤','🤍','💯','💢','❤️‍🔥','❤️‍🔥'],
+  '动物': ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐻‍❄️','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🪱','🐛','🦋','🐌','🐞','🐜','🪰','🪲','🪳','🦟','🦗','🕷️','🦂','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🦣','🐘','🦛','🦏','🐪','🐫','🦒','🦘','🦬','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🦮','🐈','🐈‍⬛','🪶','🐓','🦃','🦤','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦫','🦦','🦥','🐁','🐀','🐿️','🦔'],
+  '食物': ['🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🫒','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🌭','🍔','🍟','🍕','🫓','🥪','🥙','🧆','🌮','🌯','🫔','🥗','🥘','🫕','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥠','🥮','🍢','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯','🧃','🥤','🧋','🍵','☕','🫖','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾','🧊','🥄','🍴','🍽️','🥣','🥡','🥢','🧂']
+};
+
+// 翻译语言列表
+const TRANSLATE_LANGS = [
+  { code: 'zh', name: '中文' },
+  { code: 'zh-TW', name: '中文繁体' },
+  { code: 'en', name: '英语' },
+  { code: 'en-GB', name: '英式英语' },
+  { code: 'ja', name: '日语' },
+  { code: 'ko', name: '韩语' },
+  { code: 'fr', name: '法语' },
+  { code: 'de', name: '德语' },
+  { code: 'es', name: '西班牙语' },
+  { code: 'it', name: '意大利语' },
+  { code: 'ru', name: '俄语' },
+  { code: 'ar', name: '阿拉伯语' }
+];
+
+// 扩展Chat对象
+Object.assign(Chat, {
+  // 表情相关
+  currentEmojiCategory: '常用',
+  
+  /**
+   * 切换表情面板
+   */
+  toggleEmojiPanel() {
+    const panel = document.getElementById('emoji-panel');
+    if (!panel) return;
+    
+    this.closeAllPanels();
+    
+    if (panel.classList.contains('hidden')) {
+      panel.classList.remove('hidden');
+      this.renderEmojiPanel();
+    } else {
+      panel.classList.add('hidden');
+    }
+  },
+  
+  /**
+   * 渲染表情面板
+   */
+  renderEmojiPanel() {
+    const container = document.getElementById('emoji-grid');
+    const tabs = document.getElementById('emoji-tabs');
+    if (!container || !tabs) return;
+    
+    // 渲染分类标签
+    tabs.innerHTML = Object.keys(EMOJI_CATEGORIES).map(cat => `
+      <button class="emoji-tab ${cat === this.currentEmojiCategory ? 'active' : ''}" data-category="${cat}">${cat}</button>
+    `).join('');
+    
+    // 绑定标签点击
+    tabs.querySelectorAll('.emoji-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        this.currentEmojiCategory = tab.dataset.category;
+        this.renderEmojiGrid();
+        tabs.querySelectorAll('.emoji-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+    
+    this.renderEmojiGrid();
+  },
+  
+  /**
+   * 渲染表情网格
+   */
+  renderEmojiGrid() {
+    const container = document.getElementById('emoji-grid');
+    if (!container) return;
+    
+    const emojis = EMOJI_CATEGORIES[this.currentEmojiCategory] || [];
+    container.innerHTML = emojis.map(emoji => `
+      <button class="emoji-btn" data-emoji="${emoji}">${emoji}</button>
+    `).join('');
+    
+    // 绑定表情点击
+    container.querySelectorAll('.emoji-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.insertEmoji(btn.dataset.emoji);
+      });
+    });
+  },
+  
+  /**
+   * 插入表情到输入框
+   */
+  insertEmoji(emoji) {
+    const input = document.getElementById('message-input');
+    if (input) {
+      input.value += emoji;
+      input.focus();
+    }
+  },
+  
+  // 翻译相关
+  selectedTranslateLang: 'en',
+  
+  /**
+   * 切换翻译面板
+   */
+  toggleTranslatePanel() {
+    const panel = document.getElementById('translate-panel');
+    if (!panel) return;
+    
+    this.closeAllPanels();
+    
+    if (panel.classList.contains('hidden')) {
+      panel.classList.remove('hidden');
+      this.renderTranslatePanel();
+    } else {
+      panel.classList.add('hidden');
+    }
+  },
+  
+  /**
+   * 渲染翻译面板
+   */
+  renderTranslatePanel() {
+    const langs = document.getElementById('translate-langs');
+    if (!langs) return;
+    
+    langs.innerHTML = TRANSLATE_LANGS.map(lang => `
+      <button class="lang-btn ${lang.code === this.selectedTranslateLang ? 'selected' : ''}" data-lang="${lang.code}">${lang.name}</button>
+    `).join('');
+    
+    langs.querySelectorAll('.lang-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.selectedTranslateLang = btn.dataset.lang;
+        langs.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+      });
+    });
+  },
+  
+  /**
+   * 执行翻译
+   */
+  async doTranslate() {
+    const input = document.getElementById('translate-input');
+    const text = input?.value.trim();
+    const fromLang = 'auto';
+    const toLang = this.selectedTranslateLang;
+    
+    if (!text) {
+      UI.showToast('请输入要翻译的文字');
+      return;
+    }
+    
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, from: fromLang, to: toLang })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        const resultInput = document.getElementById('translate-result');
+        if (resultInput) {
+          resultInput.value = data.translatedText;
+        }
+      } else {
+        UI.showToast('翻译失败');
+      }
+    } catch (error) {
+      console.error('翻译失败:', error);
+      UI.showToast('翻译请求失败');
+    }
+  },
+  
+  /**
+   * 插入翻译结果到输入框
+   */
+  insertTranslation() {
+    const resultInput = document.getElementById('translate-result');
+    const messageInput = document.getElementById('message-input');
+    
+    if (resultInput && messageInput) {
+      messageInput.value = resultInput.value;
+      messageInput.focus();
+      this.closeAllPanels();
+    }
+  },
+  
+  // 语音录制相关
+  mediaRecorder: null,
+  audioChunks: [],
+  isRecording: false,
+  recordingStartTime: null,
+  
+  /**
+   * 切换语音录制
+   */
+  async toggleVoiceRecording() {
+    if (this.isRecording) {
+      this.stopRecording();
+    } else {
+      await this.startRecording();
+    }
+  },
+  
+  /**
+   * 开始录音
+   */
+  async startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.mediaRecorder = new MediaRecorder(stream);
+      this.audioChunks = [];
+      
+      this.mediaRecorder.ondataavailable = (e) => {
+        this.audioChunks.push(e.data);
+      };
+      
+      this.mediaRecorder.onstop = () => {
+        this.sendVoiceMessage();
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      this.mediaRecorder.start();
+      this.isRecording = true;
+      this.recordingStartTime = Date.now();
+      
+      // 显示录音UI
+      const timer = document.getElementById('voice-timer');
+      if (timer) {
+        timer.classList.remove('hidden');
+        this.updateRecordingTime();
+      }
+      
+      // 更新按钮状态
+      const voiceBtn = document.getElementById('btn-voice');
+      if (voiceBtn) {
+        voiceBtn.classList.add('recording');
+      }
+    } catch (error) {
+      console.error('无法访问麦克风:', error);
+      UI.showToast('无法访问麦克风，请检查权限设置');
+    }
+  },
+  
+  /**
+   * 停止录音
+   */
+  stopRecording() {
+    if (this.mediaRecorder && this.isRecording) {
+      this.mediaRecorder.stop();
+      this.isRecording = false;
+      
+      const timer = document.getElementById('voice-timer');
+      if (timer) {
+        timer.classList.add('hidden');
+      }
+      
+      const voiceBtn = document.getElementById('btn-voice');
+      if (voiceBtn) {
+        voiceBtn.classList.remove('recording');
+      }
+    }
+  },
+  
+  /**
+   * 更新录音时间显示
+   */
+  updateRecordingTime() {
+    if (!this.isRecording) return;
+    
+    const elapsed = Math.floor((Date.now() - this.recordingStartTime) / 1000);
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    const display = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    const durationEl = document.getElementById('voice-duration');
+    if (durationEl) {
+      durationEl.textContent = display;
+    }
+    
+    requestAnimationFrame(() => this.updateRecordingTime());
+  },
+  
+  /**
+   * 发送语音消息
+   */
+  async sendVoiceMessage() {
+    if (this.audioChunks.length === 0 || !this.currentChat) return;
+    
+    const blob = new Blob(this.audioChunks, { type: 'audio/webm' });
+    const reader = new FileReader();
+    
+    reader.onloadend = () => {
+      const base64 = reader.result;
+      
+      // 通过Socket发送
+      if (window.socket && window.socket.connected) {
+        window.socket.emit('send-message', {
+          chatId: this.currentChat.id,
+          senderId: Auth.getCurrentUserId(),
+          encryptedContent: base64,
+          type: 'voice',
+          burnAfter: 0,
+          isAnonymous: false
+        });
+      }
+      
+      // 本地显示
+      const duration = Math.floor((Date.now() - this.recordingStartTime) / 1000);
+      const localMessage = {
+        id: 'local-' + Date.now(),
+        chatId: this.currentChat.id,
+        senderId: Auth.getCurrentUserId(),
+        galNumber: Auth.currentUser?.galNumber || '',
+        nickname: Auth.currentUser?.nickname || '',
+        encryptedContent: base64,
+        type: 'voice',
+        duration,
+        createdAt: new Date().toISOString()
+      };
+      
+      this.displayMessage(localMessage, true);
+    };
+    
+    reader.readAsDataURL(blob);
+  },
+  
+  // 阅后即焚相关
+  burnMode: false,
+  burnSeconds: 30,
+  
+  /**
+   * 切换阅后即焚面板
+   */
+  toggleBurnPanel() {
+    const panel = document.getElementById('burn-panel');
+    if (!panel) return;
+    
+    this.closeAllPanels();
+    
+    if (panel.classList.contains('hidden')) {
+      panel.classList.remove('hidden');
+    } else {
+      panel.classList.add('hidden');
+    }
+  },
+  
+  /**
+   * 设置阅后即焚时间
+   */
+  setBurnTime(seconds) {
+    this.burnSeconds = seconds;
+    this.burnMode = true;
+    const destroyBtn = document.getElementById('btn-destroy');
+    if (destroyBtn) {
+      destroyBtn.classList.add('active');
+    }
+    this.closeAllPanels();
+    
+    // 显示倒计时
+    const timer = document.getElementById('destroy-timer');
+    if (timer) {
+      timer.classList.remove('hidden');
+      timer.dataset.ttl = seconds;
+      timer.textContent = `🔥 ${seconds}秒后自动销毁`;
+    }
+  },
+  
+  // 匿踪模式
+  anonymousMode: false,
+  
+  /**
+   * 切换匿踪模式
+   */
+  toggleAnonymousMode() {
+    this.anonymousMode = !this.anonymousMode;
+    
+    const anonymousBtn = document.getElementById('btn-anonymous');
+    const anonymousPanel = document.getElementById('anonymous-panel');
+    const anonymousHint = document.getElementById('anonymous-hint');
+    
+    if (anonymousBtn) {
+      anonymousBtn.classList.toggle('active', this.anonymousMode);
+    }
+    
+    if (anonymousPanel) {
+      if (this.anonymousMode) {
+        anonymousPanel.classList.remove('hidden');
+        if (anonymousHint) {
+          anonymousHint.textContent = '👁️ 匿踪信息 — 发送的消息将不显示发送者信息';
+        }
+      } else {
+        anonymousPanel.classList.add('hidden');
+      }
+    }
+  },
+  
+  // 关闭所有面板
+  closeAllPanels() {
+    const panels = ['emoji-panel', 'translate-panel', 'burn-panel', 'redpacket-panel'];
+    panels.forEach(id => {
+      const panel = document.getElementById(id);
+      if (panel && !panel.classList.contains('hidden')) {
+        panel.classList.add('hidden');
+      }
+    });
+  }
+});
+
+// 绑定翻译按钮事件
+document.addEventListener('DOMContentLoaded', () => {
+  const translateBtn = document.getElementById('btn-do-translate');
+  if (translateBtn) {
+    translateBtn.addEventListener('click', () => {
+      Chat.doTranslate();
+    });
+  }
+  
+  const insertBtn = document.getElementById('btn-insert-translation');
+  if (insertBtn) {
+    insertBtn.addEventListener('click', () => {
+      Chat.insertTranslation();
+    });
+  }
+});

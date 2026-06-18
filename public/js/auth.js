@@ -257,7 +257,8 @@ const Auth = {
   },
   
   async handleLogin() {
-    const account = document.getElementById('login-account').value.trim();
+    const rawAccount = document.getElementById("login-account").value.trim();
+    const account = rawAccount.includes("@") ? rawAccount.toLowerCase() : rawAccount;
     const password = document.getElementById('login-password').value;
     const errorEl = document.getElementById('auth-error');
     
