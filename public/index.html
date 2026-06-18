@@ -93,7 +93,32 @@
         </form>
         
         <div id="auth-error" class="error-message hidden"></div>
-      </div>
+      
+        <!-- 忘记密码表单 -->
+        <form id="forgot-password-form" class="auth-form hidden">
+          <h2>找回密码</h2>
+          <div class="form-group">
+            <label for="fp-email">注册邮箱</label>
+            <input type="email" id="fp-email" placeholder="your@email.com" required>
+          </div>
+          <p id="fp-step1-hint" class="hint-text" style="color:var(--accent-blue);font-size:13px;display:none">验证码已发送（Demo模式显示在页面上）</p>
+          <div class="form-group">
+            <label for="rp-code">验证码</label>
+            <input type="text" id="rp-code" placeholder="输入验证码">
+          </div>
+          <div class="form-group">
+            <label for="rp-new-password">新密码</label>
+            <input type="password" id="rp-new-password" placeholder="输入新密码" minlength="6">
+          </div>
+          <div class="form-group">
+            <label for="rp-confirm-password">确认新密码</label>
+            <input type="password" id="rp-confirm-password" placeholder="再输一次">
+          </div>
+          <p id="rp-hint" class="error-message hidden"></p>
+          <button type="submit" class="btn btn-primary">重置密码</button>
+          <p class="auth-switch"><a href="#" id="back-to-login">返回登录</a></p>
+        </form>
+</div>
     </div>
 
     <!-- 主界面 -->
@@ -104,6 +129,7 @@
           <span class="user-gal" id="current-gal"></span>
         </div>
         <h1 class="page-title" id="page-title">消息</h1>
+        <span class="server-status" id="server-status" style="font-size:10px;color:var(--text-secondary);margin-left:8px">●</span>
         <button class="btn-icon" id="btn-settings">
           <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
             <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97 0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1 0 .33.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66z"/>
@@ -192,6 +218,10 @@
                 <h2 id="profile-nickname">用户昵称</h2>
                 <p class="profile-gal" id="profile-gal">Gal://XXXXXXXXXXXX</p>
                 <span class="profile-encrypted">🔒 已加密</span>
+                  <div class="profile-stats" style="display:flex;gap:20px;margin-top:12px">
+              <div style="text-align:center"><span id="stat-contacts" style="font-size:20px;font-weight:700;color:var(--accent-blue)">0</span><br><small style="color:var(--text-secondary)">好友</small></div>
+              <div style="text-align:center"><span id="stat-chats" style="font-size:20px;font-weight:700;color:var(--accent-blue)">0</span><br><small style="color:var(--text-secondary)">聊天</small></div>
+            </div>
               </div>
             </div>
             <!-- 功能列表 -->
@@ -228,7 +258,11 @@
                 </div>
               </div>
               <div class="menu-group">
-                <div class="menu-item danger" id="btn-logout">
+                
+          <div class="menu-item" id="btn-edit-profile">
+            <span class="menu-icon">✏️</span><span class="menu-text">编辑昵称</span><span class="menu-arrow">›</span>
+          </div>
+<div class="menu-item danger" id="btn-logout">
                   <span class="menu-icon">🚪</span><span class="menu-text">退出登录</span>
                 </div>
               </div>
@@ -347,7 +381,20 @@
         </div>
         <!-- 匿踪提示 -->
         <div class="input-panel hidden" id="anonymous-panel">
-          <div class="anonymous-tip">👁️ 匿踪信息 — 发送的消息将不显示发送者信息</div>
+          <div class="anonymous-tip" id="anonymous-hint">👁️ 匿踪信息 — 发送的消息将不显示发送者信息</div>
+        </div>
+        <div id="destroy-timer" class="hidden" data-ttl="30"></div>
+        <div id="redpacket-panel" class="input-panel hidden">
+          <div class="redpacket-form">
+            <div class="rp-field"><label>红包金额（星币）</label><input type="number" id="rp-amount" placeholder="输入金额" min="0.01" step="0.01"></div>
+            <div class="rp-field"><label>红包个数</label><input type="number" id="rp-count" value="1" min="1"></div>
+            <div class="rp-type">
+              <button class="rp-type-btn selected" id="rp-type-random" data-type="random">随机红包</button>
+              <button class="rp-type-btn" id="rp-type-normal" data-type="normal">普通红包</button>
+            </div>
+            <div class="rp-field"><label>祝福语</label><input type="text" id="rp-message" value="恭喜发财，大吉大利"></div>
+            <button class="btn btn-primary btn-red" id="btn-send-redpacket" style="width:100%;margin-top:8px;background:#FF4444">发红包</button>
+          </div>
         </div>
         <!-- 隐藏的文件输入 -->
         <input type="file" id="file-input" style="display:none;">
@@ -489,11 +536,72 @@
           </svg>
         </button>
       </div>
-      <div class="modal-body" id="modal-body">
+      <div class="modal-body" id="modal-body"><input type="text" id="modal-input" class="modal-input" style="display:none" placeholder="">
         <!-- 模态框内容 -->
       </div>
       <div class="modal-footer" id="modal-footer">
         <!-- 模态框按钮 -->
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 添加联系人弹窗 -->
+  <div id="add-contact-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>添加联系人</h3>
+        <button class="btn-icon" id="btn-close-add-contact">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <input type="text" id="add-contact-input" placeholder="输入Gal号码添加好友">
+          <p id="add-contact-hint" class="hint-text" style="color:var(--text-secondary);font-size:12px;margin-top:4px">输入对方的Gal号码，如 GAL90IA56MH2</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-confirm-add-contact">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新建聊天选项弹窗 -->
+  <div id="new-chat-options" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>新建聊天</h3>
+        <button class="btn-icon" id="btn-close-new-chat-opt">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <button class="btn btn-secondary" id="opt-new-private" style="width:100%;margin-bottom:8px">💬 新建私聊</button>
+        <button class="btn btn-secondary" id="opt-new-group" style="width:100%">👥 新建群聊</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 群聊创建弹窗 -->
+  <div id="group-chat-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>创建群聊</h3>
+        <button class="btn-icon" id="btn-close-group-chat">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>群组名称</label>
+          <input type="text" id="group-name-input" placeholder="输入群组名称">
+        </div>
+        <p style="color:var(--text-secondary);font-size:13px;margin-top:8px">选择群成员：</p>
+        <div id="group-members-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-confirm-create-group">创建</button>
       </div>
     </div>
   </div>
