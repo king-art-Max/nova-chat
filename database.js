@@ -1114,7 +1114,7 @@ async function initAICompanyPersonas() {
   for (const persona of AI_COMPANY_PERSONAS) {
     try {
       await runSql(
-        'INSERT OR IGNORE INTO ai_personas (gal_number, name, avatar, system_prompt) VALUES (?, ?, ?, ?)',
+        'INSERT INTO ai_personas (gal_number, name, avatar, system_prompt) VALUES (?, ?, ?, ?)',
         [persona.gal_number, persona.name, persona.avatar, persona.system_prompt]
       );
     } catch (e) {
