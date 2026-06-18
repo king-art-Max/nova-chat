@@ -250,7 +250,7 @@ const App = {
       <div class="settings-list">
         <div class="setting-item">
           <span>版本</span>
-          <span class="setting-value">Nova-OS v1.0.0</span>
+          <span class="setting-value">Nova-OS v3.0</span>
         </div>
         <div class="setting-item">
           <span>加密方式</span>
@@ -565,11 +565,49 @@ const Contacts = {
           e.stopPropagation();
           const contact = this.contacts.find(c => c.id === parseInt(item.dataset.contactId));
           if (contact) {
-            Chat.createPrivateChat(contact.id, contact);
+            // 检查是否是防互扰群成员私聊
+            this.checkQuietModeAndStartChat(contact.id, contact);
           }
         });
       }
     });
+  },
+  
+  /**
+   * 检查防互扰模式并开始聊天
+   */
+  async checkQuietModeAndStartChat(contactId, contact) {
+    // 获取所有群组，检查双方是否都在某个防互扰群中
+    try {
+      const response = await fetch(`/api/chats?userId=${Auth.getCurrentUserId()}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        const groups = data.chats.filter(c => c.type === 'group');
+        let isInQuietGroup = false;
+        
+        for (const group of groups) {
+          if (group.groupMode === 'quiet' && group.members) {
+            const isMeInGroup = group.members.some(m => m.id === Auth.getCurrentUserId());
+            const isContactInGroup = group.members.some(m => m.id === contactId);
+            if (isMeInGroup && isContactInGroup) {
+              isInQuietGroup = true;
+              break;
+            }
+          }
+        }
+        
+        if (isInQuietGroup) {
+          UI.showToast('⚠️ 你们在防互扰群中，无法发起私聊');
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('检查防互扰模式失败:', error);
+    }
+    
+    // 可以发起私聊
+    Chat.createPrivateChat(contactId, contact);
   },
   
   /**
@@ -829,9 +867,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ==================== 群组设置功能 ====================
+// ==================== 超级商业群组功能 ====================
 const GroupSettings = {
   currentChatId: null,
+  currentChat: null,
   
   /**
    * 显示群组设置
@@ -845,6 +884,7 @@ const GroupSettings = {
       const data = await response.json();
       
       if (data.success) {
+        this.currentChat = data.chat;
         this.render(data.chat, data.members);
       }
     } catch (error) {
@@ -866,7 +906,7 @@ const GroupSettings = {
     // 设置当前模式
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.classList.remove('selected');
-      if (btn.dataset.mode === (chat.group_mode || 'open')) {
+      if (btn.dataset.mode === (chat.groupMode || 'open')) {
         btn.classList.add('selected');
       }
     });
@@ -875,9 +915,41 @@ const GroupSettings = {
     this.renderMembers(members);
     
     // 显示邀请码
-    if (chat.invite_code) {
+    if (chat.inviteCode) {
       document.getElementById('invite-code-section').classList.remove('hidden');
-      document.getElementById('invite-code-display').textContent = chat.invite_code;
+      document.getElementById('invite-code-display').textContent = chat.inviteCode;
+    } else {
+      document.getElementById('invite-code-section').classList.add('hidden');
+    }
+    
+    // 群公告预览
+    this.updateAnnouncementPreview(chat.announcement);
+  },
+  
+  /**
+   * 更新群公告预览
+   */
+  updateAnnouncementPreview(announcement) {
+    let previewEl = document.getElementById('announcement-preview');
+    if (!previewEl && announcement) {
+      previewEl = document.createElement('div');
+      previewEl.id = 'announcement-preview';
+      previewEl.className = 'group-announcement-preview';
+      const settingsContent = document.querySelector('.group-settings-content');
+      if (settingsContent) {
+        const announcementSection = document.querySelector('.group-announcement-section');
+        if (announcementSection) {
+          settingsContent.insertBefore(previewEl, announcementSection.nextSibling);
+        }
+      }
+    }
+    if (previewEl) {
+      if (announcement) {
+        previewEl.innerHTML = `<div class="announcement-label">📌 群公告</div><div class="announcement-content">${UI.escapeHtml(announcement)}</div>`;
+        previewEl.classList.remove('hidden');
+      } else {
+        previewEl.classList.add('hidden');
+      }
     }
   },
   
@@ -949,6 +1021,7 @@ const GroupSettings = {
         UI.showToast('角色已更新');
       } else {
         UI.showToast(data.error || '更新失败');
+        this.show(this.currentChatId); // 刷新
       }
     } catch (error) {
       console.error('更新角色失败:', error);
@@ -1039,6 +1112,51 @@ const GroupSettings = {
       console.error('生成邀请码失败:', error);
       UI.showToast('生成失败');
     }
+  },
+  
+  /**
+   * 切换群模式（调用API）
+   */
+  async switchMode(mode) {
+    try {
+      const response = await fetch(`/api/chats/${this.currentChatId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: Auth.getCurrentUserId(),
+          mode: mode
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        this.currentChat.groupMode = mode;
+        UI.showToast(`群模式已切换为${this.getModeName(mode)}`);
+        // 通知聊天窗口更新状态
+        if (Chat.currentChat && Chat.currentChat.id === this.currentChatId) {
+          Chat.updateGroupMode(mode);
+        }
+      } else {
+        UI.showToast(data.error || '切换失败');
+        // 恢复按钮状态
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+          btn.classList.remove('selected');
+          if (btn.dataset.mode === this.currentChat.groupMode) {
+            btn.classList.add('selected');
+          }
+        });
+      }
+    } catch (error) {
+      console.error('切换模式失败:', error);
+      UI.showToast('切换失败');
+    }
+  },
+  
+  /**
+   * 获取模式名称
+   */
+  getModeName(mode) {
+    const names = { open: '开放群', meeting: '会议群', quiet: '防互扰群' };
+    return names[mode] || mode;
   }
 };
 
@@ -1061,17 +1179,193 @@ document.addEventListener('DOMContentLoaded', () => {
     inviteBtn.addEventListener('click', () => GroupSettings.generateInviteCode());
   }
   
-  // 模式选择
+  // 模式选择 - 点击后调用API切换
   document.querySelectorAll('.mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
+      const newMode = btn.dataset.mode;
+      if (GroupSettings.currentChat && GroupSettings.currentChat.groupMode === newMode) {
+        return; // 相同模式不处理
+      }
+      
+      // 高亮显示
       document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
+      
+      // 调用API切换模式
+      await GroupSettings.switchMode(newMode);
     });
   });
 });
 
-// ==================== AI公司功能 ====================
+// ==================== 创建超级商业群组 ====================
+const SuperGroup = {
+  /**
+   * 显示创建群组弹窗
+   */
+  showCreateModal() {
+    document.getElementById('super-group-modal').classList.remove('hidden');
+  },
+  
+  /**
+   * 关闭创建群组弹窗
+   */
+  closeModal() {
+    document.getElementById('super-group-modal').classList.add('hidden');
+    document.getElementById('super-group-name').value = '';
+    document.querySelectorAll('input[name="super-group-mode"]').forEach(r => r.checked = false);
+  },
+  
+  /**
+   * 创建超级商业群组
+   */
+  async create() {
+    const name = document.getElementById('super-group-name').value.trim();
+    const selectedMode = document.querySelector('input[name="super-group-mode"]:checked');
+    const mode = selectedMode ? selectedMode.value : 'open';
+    
+    if (!name) {
+      UI.showToast('请输入群组名称');
+      return;
+    }
+    
+    try {
+      UI.showToast('正在创建群组...');
+      const response = await fetch('/api/chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'group',
+          name: name,
+          userId: Auth.getCurrentUserId(),
+          memberIds: []
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // 更新群组模式
+        await fetch(`/api/chats/${data.chat.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: Auth.getCurrentUserId(),
+            mode: mode
+          })
+        });
+        
+        this.closeModal();
+        UI.showToast('超级商业群组创建成功！');
+        
+        // 刷新列表并打开群聊
+        Chat.loadChatList();
+        setTimeout(() => {
+          Chat.openChat(data.chat.id);
+        }, 500);
+      } else {
+        UI.showToast(data.error || '创建失败');
+      }
+    } catch (error) {
+      console.error('创建超级商业群组失败:', error);
+      UI.showToast('创建失败');
+    }
+  },
+  
+  /**
+   * 显示通过邀请码加入群组
+   */
+  showJoinByCode() {
+    UI.showModal('加入群组', `
+      <div class="form-group">
+        <label>输入邀请码</label>
+        <input type="text" id="join-group-code" placeholder="输入8位邀请码" maxlength="8" style="text-transform:uppercase;">
+      </div>
+      <p id="join-code-hint" style="color:var(--text-muted);font-size:12px;margin-top:4px;"></p>
+    `, [
+      { text: '取消', class: 'btn-secondary' },
+      { text: '加入', class: 'btn-primary', closeOnClick: false, onClick: async () => {
+        const code = document.getElementById('join-group-code').value.trim().toUpperCase();
+        const hint = document.getElementById('join-code-hint');
+        
+        if (!code || code.length < 6) {
+          hint.style.color = '#ff4444';
+          hint.textContent = '请输入有效的邀请码';
+          return;
+        }
+        
+        hint.style.color = 'var(--text-muted)';
+        hint.textContent = '正在加入群组...';
+        
+        try {
+          const response = await fetch('/api/chats/join', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: Auth.getCurrentUserId(),
+              inviteCode: code
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            UI.showToast('加入群组成功！');
+            UI.closeModal();
+            Chat.loadChatList();
+            setTimeout(() => {
+              Chat.openChat(data.chatId);
+            }, 500);
+          } else {
+            hint.style.color = '#ff4444';
+            hint.textContent = data.error || '加入失败';
+          }
+        } catch (error) {
+          console.error('加入群组失败:', error);
+          hint.style.color = '#ff4444';
+          hint.textContent = '网络错误，请重试';
+        }
+      }}
+    ]);
+  }
+};
+
+// 绑定超级商业群组事件
+document.addEventListener('DOMContentLoaded', () => {
+  // 创建群组按钮
+  const createGroupBtn = document.getElementById('btn-create-super-group');
+  if (createGroupBtn) {
+    createGroupBtn.addEventListener('click', () => {
+      document.getElementById('super-group-modal').classList.remove('hidden');
+    });
+  }
+  
+  // 关闭弹窗
+  const closeBtn = document.getElementById('btn-close-super-group');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      SuperGroup.closeModal();
+    });
+  }
+  
+  // 确认创建
+  const confirmBtn = document.getElementById('btn-confirm-super-group');
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', () => SuperGroup.create());
+  }
+  
+  // 加入群组按钮
+  const joinBtn = document.getElementById('btn-join-group');
+  if (joinBtn) {
+    joinBtn.addEventListener('click', () => {
+      SuperGroup.showJoinByCode();
+    });
+  }
+});
+
+// ==================== AI公司群组功能 ====================
 const AICompany = {
+  currentChatId: null,
+  
   /**
    * 显示创建AI公司弹窗
    */
@@ -1081,6 +1375,13 @@ const AICompany = {
     document.getElementById('ai-company-name').value = '';
     document.getElementById('ai-company-industry').value = '科技';
     document.querySelectorAll('input[name="ai-role"]').forEach(cb => cb.checked = false);
+  },
+  
+  /**
+   * 关闭创建AI公司弹窗
+   */
+  closeCreateModal() {
+    document.getElementById('ai-company-modal').classList.add('hidden');
   },
   
   /**
@@ -1118,17 +1419,24 @@ const AICompany = {
       const data = await response.json();
       
       if (data.success) {
-        document.getElementById('ai-company-modal').classList.add('hidden');
+        this.closeCreateModal();
         UI.showToast('AI公司创建成功！');
-        
-        // 加入群组并打开聊天
-        Chat.joinChat(data.chatId);
         
         // 保存群组信息供会议使用
         localStorage.setItem(`ai_company_${data.chatId}`, JSON.stringify({
           name: data.chatName,
+          industry: industry,
           roles: selectedRoles
         }));
+        
+        // 加入群组并打开聊天
+        Chat.joinChat(data.chatId);
+        
+        // 刷新聊天列表并打开群聊
+        Chat.loadChatList();
+        setTimeout(() => {
+          Chat.openChat(data.chatId);
+        }, 500);
       } else {
         UI.showToast(data.error || '创建失败');
       }
@@ -1145,9 +1453,30 @@ const AICompany = {
     this.currentChatId = chatId;
     document.getElementById('ai-meeting-modal').classList.remove('hidden');
     document.getElementById('meeting-content').innerHTML = `
+      <div class="meeting-header">
+        <div class="meeting-icon">📋</div>
+        <h3>AI公司会议系统</h3>
+      </div>
       <p class="meeting-hint">点击下方按钮，召开AI公司会议</p>
       <p class="meeting-subhint">会议将自动安排各部门AI汇报工作</p>
+      <div class="meeting-agenda-preview">
+        <div class="agenda-item"><span class="agenda-num">1</span>总经理开场致辞</div>
+        <div class="agenda-item"><span class="agenda-num">2</span>各部门工作汇报</div>
+        <div class="agenda-item"><span class="agenda-num">3</span>监督官总结点评</div>
+        <div class="agenda-item"><span class="agenda-num">4</span>总经理总结部署</div>
+      </div>
     `;
+    
+    // 重置会议按钮状态
+    document.getElementById('btn-start-meeting').textContent = '📢 召开会议';
+    document.getElementById('btn-start-meeting').disabled = false;
+  },
+  
+  /**
+   * 关闭AI会议弹窗
+   */
+  closeMeeting() {
+    document.getElementById('ai-meeting-modal').classList.add('hidden');
   },
   
   /**
@@ -1155,7 +1484,7 @@ const AICompany = {
    */
   async startMeeting() {
     const content = document.getElementById('meeting-content');
-    content.innerHTML = '<div class="meeting-loading">正在召开会议...</div>';
+    content.innerHTML = '<div class="meeting-loading"><div class="loading-spinner"></div><p>正在召开会议...</p></div>';
     
     try {
       const response = await fetch(`/api/ai-company/${this.currentChatId}/meeting`, {
@@ -1171,12 +1500,17 @@ const AICompany = {
       
       if (data.success) {
         // 显示会议内容
-        let html = '<div class="meeting-messages">';
+        let html = '<div class="meeting-header"><h3>📋 会议记录</h3></div>';
+        html += '<div class="meeting-messages">';
         for (const msg of data.content) {
+          const avatar = this.getRoleAvatar(msg.galNumber);
           html += `
             <div class="meeting-message">
-              <div class="meeting-sender">${UI.escapeHtml(msg.sender)}</div>
-              <div class="meeting-text">${UI.escapeHtml(msg.content)}</div>
+              <div class="meeting-avatar">${avatar}</div>
+              <div class="meeting-bubble">
+                <div class="meeting-sender">${UI.escapeHtml(msg.sender)}</div>
+                <div class="meeting-text">${UI.escapeHtml(msg.content)}</div>
+              </div>
             </div>
           `;
         }
@@ -1185,13 +1519,14 @@ const AICompany = {
         
         // 将会议内容发送到群聊
         for (const msg of data.content) {
-          // 查找发送者
-          const member = Chat.currentChat?.members?.find(m => m.galNumber === msg.galNumber);
-          if (member) {
-            socket.emit('send-message', {
+          if (window.socket && window.socket.connected) {
+            window.socket.emit('send-message', {
               chatId: this.currentChatId,
-              senderId: member.id,
-              encryptedContent: JSON.stringify({ plain: true, content: `【${msg.sender}】${msg.content}` }),
+              senderId: Auth.getCurrentUserId(),
+              encryptedContent: JSON.stringify({ 
+                plain: true, 
+                content: `【${msg.sender}】${msg.content}` 
+              }),
               type: 'normal',
               burnAfter: 0,
               isAnonymous: false
@@ -1201,23 +1536,50 @@ const AICompany = {
         
         document.getElementById('btn-start-meeting').textContent = '✅ 会议已召开';
         document.getElementById('btn-start-meeting').disabled = true;
+        
+        // 会议完成后刷新聊天消息
+        setTimeout(() => {
+          if (Chat.currentChat && Chat.currentChat.id === this.currentChatId) {
+            Chat.loadMessages(this.currentChatId);
+          }
+        }, 1000);
       } else {
-        content.innerHTML = `<p class="meeting-error">会议召开失败: ${data.error}</p>`;
+        content.innerHTML = `<p class="meeting-error">❌ 会议召开失败: ${data.error}</p>`;
       }
     } catch (error) {
       console.error('召开会议失败:', error);
-      content.innerHTML = '<p class="meeting-error">会议召开失败</p>';
+      content.innerHTML = '<p class="meeting-error">❌ 会议召开失败</p>';
     }
+  },
+  
+  /**
+   * 获取岗位头像
+   */
+  getRoleAvatar(galNumber) {
+    const avatars = {
+      'AI-CEO000005': '👔',
+      'AI-CFO000006': '💰',
+      'AI-COO000007': '💼',
+      'AI-CMO000008': '📊',
+      'AI-CTO000009': '💻',
+      'AI-LAW000010': '⚖️',
+      'AI-AUD000011': '🔍'
+    };
+    return avatars[galNumber] || '🤖';
   }
 };
 
 // 绑定AI公司事件
 document.addEventListener('DOMContentLoaded', () => {
+  // 创建AI公司按钮
+  const createBtn = document.getElementById('btn-create-ai-company');
+  if (createBtn) {
+    createBtn.addEventListener('click', () => AICompany.showCreateModal());
+  }
+  
   const closeBtn = document.getElementById('btn-close-ai-company');
   if (closeBtn) {
-    closeBtn.addEventListener('click', () => {
-      document.getElementById('ai-company-modal').classList.add('hidden');
-    });
+    closeBtn.addEventListener('click', () => AICompany.closeCreateModal());
   }
   
   const confirmBtn = document.getElementById('btn-confirm-ai-company');
@@ -1227,9 +1589,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   const closeMeetingBtn = document.getElementById('btn-close-meeting');
   if (closeMeetingBtn) {
-    closeMeetingBtn.addEventListener('click', () => {
-      document.getElementById('ai-meeting-modal').classList.add('hidden');
-    });
+    closeMeetingBtn.addEventListener('click', () => AICompany.closeMeeting());
   }
   
   const startMeetingBtn = document.getElementById('btn-start-meeting');
@@ -1241,4 +1601,5 @@ document.addEventListener('DOMContentLoaded', () => {
 // 导出新增模块
 window.MenuFunctions = MenuFunctions;
 window.GroupSettings = GroupSettings;
+window.SuperGroup = SuperGroup;
 window.AICompany = AICompany;

@@ -141,6 +141,21 @@
       <main class="page-container">
         <!-- 消息页面 -->
         <div class="page" id="page-chats">
+          <!-- 群组快捷操作栏 -->
+          <div class="group-quick-actions">
+            <button class="quick-action-btn" id="btn-create-super-group" title="创建超级商业群组">
+              <span class="action-icon">🚀</span>
+              <span class="action-text">创建群组</span>
+            </button>
+            <button class="quick-action-btn" id="btn-join-group" title="通过邀请码加入群组">
+              <span class="action-icon">🔗</span>
+              <span class="action-text">加入群组</span>
+            </button>
+            <button class="quick-action-btn" id="btn-create-ai-company" title="创建AI公司">
+              <span class="action-icon">🤖</span>
+              <span class="action-text">AI公司</span>
+            </button>
+          </div>
           <div class="chat-list" id="chat-list">
             <div class="empty-state">
               <p>还没有聊天记录</p>
@@ -485,6 +500,61 @@
           <div class="invite-code-display" id="invite-code-display"></div>
           <p class="invite-hint">分享邀请码，好友可加入群组</p>
         </div>
+        <!-- AI公司专属按钮 -->
+        <div class="ai-company-actions hidden" id="ai-company-actions">
+          <button class="btn btn-primary btn-ai-meeting" id="btn-open-ai-meeting">📋 召开AI会议</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 创建超级商业群组弹窗 -->
+    <div id="super-group-modal" class="modal hidden">
+      <div class="modal-content super-group-modal">
+        <div class="modal-header">
+          <h3>🚀 创建超级商业群组</h3>
+          <button class="btn-icon" id="btn-close-super-group">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>群组名称</label>
+            <input type="text" id="super-group-name" placeholder="输入群组名称">
+          </div>
+          <div class="form-group">
+            <label>选择群模式</label>
+            <div class="mode-selection">
+              <label class="mode-option">
+                <input type="radio" name="super-group-mode" value="open">
+                <div class="mode-card">
+                  <span class="mode-icon">🟢</span>
+                  <span class="mode-name">开放群</span>
+                  <span class="mode-desc">任何人可自由发言，适合大型社群</span>
+                </div>
+              </label>
+              <label class="mode-option">
+                <input type="radio" name="super-group-mode" value="meeting">
+                <div class="mode-card">
+                  <span class="mode-icon">🔵</span>
+                  <span class="mode-name">会议群</span>
+                  <span class="mode-desc">仅管理员可发言，适合正式会议</span>
+                </div>
+              </label>
+              <label class="mode-option">
+                <input type="radio" name="super-group-mode" value="quiet">
+                <div class="mode-card">
+                  <span class="mode-icon">🟣</span>
+                  <span class="mode-name">防互扰群</span>
+                  <span class="mode-desc">成员间不可私聊，适合团队协作</span>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="btn-cancel-super-group">取消</button>
+          <button class="btn btn-primary" id="btn-confirm-super-group">创建群组</button>
+        </div>
       </div>
     </div>
 
@@ -516,63 +586,66 @@
             </select>
           </div>
           <div class="form-group">
-            <label>选择AI岗位</label>
-            <p class="hint-text">选择加入公司的AI岗位（至少选择1个）</p>
+            <label>AI岗位 (默认全选)</label>
+            <p class="hint-text">选择加入公司的AI岗位（建议保持全选）</p>
             <div class="ai-role-grid">
-              <label class="ai-role-option">
-                <input type="checkbox" name="ai-role" value="AI-CEO000005">
+              <label class="ai-role-option checked">
+                <input type="checkbox" name="ai-role" value="AI-CEO000005" checked>
                 <div class="ai-role-card">
-                  <span class="ai-role-icon">🤵</span>
+                  <span class="ai-role-icon">👔</span>
                   <span class="ai-role-name">总经理</span>
                 </div>
               </label>
-              <label class="ai-role-option">
-                <input type="checkbox" name="ai-role" value="AI-CFO000006">
+              <label class="ai-role-option checked">
+                <input type="checkbox" name="ai-role" value="AI-CFO000006" checked>
                 <div class="ai-role-card">
-                  <span class="ai-role-icon">📊</span>
+                  <span class="ai-role-icon">💰</span>
                   <span class="ai-role-name">财务总监</span>
                 </div>
               </label>
-              <label class="ai-role-option">
-                <input type="checkbox" name="ai-role" value="AI-COO000007">
+              <label class="ai-role-option checked">
+                <input type="checkbox" name="ai-role" value="AI-COO000007" checked>
                 <div class="ai-role-card">
                   <span class="ai-role-icon">💼</span>
                   <span class="ai-role-name">运营总监</span>
                 </div>
               </label>
-              <label class="ai-role-option">
-                <input type="checkbox" name="ai-role" value="AI-CMO000008">
+              <label class="ai-role-option checked">
+                <input type="checkbox" name="ai-role" value="AI-CMO000008" checked>
                 <div class="ai-role-card">
-                  <span class="ai-role-icon">📢</span>
+                  <span class="ai-role-icon">📊</span>
                   <span class="ai-role-name">市场总监</span>
                 </div>
               </label>
-              <label class="ai-role-option">
-                <input type="checkbox" name="ai-role" value="AI-CTO000009">
+              <label class="ai-role-option checked">
+                <input type="checkbox" name="ai-role" value="AI-CTO000009" checked>
                 <div class="ai-role-card">
                   <span class="ai-role-icon">💻</span>
                   <span class="ai-role-name">技术总监</span>
                 </div>
               </label>
-              <label class="ai-role-option">
-                <input type="checkbox" name="ai-role" value="AI-LAW000010">
+              <label class="ai-role-option checked">
+                <input type="checkbox" name="ai-role" value="AI-LAW000010" checked>
                 <div class="ai-role-card">
                   <span class="ai-role-icon">⚖️</span>
                   <span class="ai-role-name">法务顾问</span>
                 </div>
               </label>
-              <label class="ai-role-option">
-                <input type="checkbox" name="ai-role" value="AI-AUD000011">
+              <label class="ai-role-option checked">
+                <input type="checkbox" name="ai-role" value="AI-AUD000011" checked>
                 <div class="ai-role-card">
-                  <span class="ai-role-icon">👁️</span>
+                  <span class="ai-role-icon">🔍</span>
                   <span class="ai-role-name">监督官</span>
                 </div>
               </label>
             </div>
           </div>
+          <div class="ai-company-info">
+            <p class="info-text">💡 AI公司将创建一个群组，包含7个AI岗位人格。每个AI都有独特的职能和汇报流程。</p>
+          </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-primary" id="btn-confirm-ai-company">创建公司</button>
+          <button class="btn btn-primary" id="btn-confirm-ai-company">🤖 创建公司</button>
         </div>
       </div>
     </div>
@@ -761,93 +834,4 @@
         <h3 id="modal-title">标题</h3>
         <button class="btn-icon" id="btn-modal-close">
           <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-          </svg>
-        </button>
-      </div>
-      <div class="modal-body" id="modal-body"><input type="text" id="modal-input" class="modal-input" style="display:none" placeholder="">
-        <!-- 模态框内容 -->
-      </div>
-      <div class="modal-footer" id="modal-footer">
-        <!-- 模态框按钮 -->
-      </div>
-    </div>
-  </div>
-
-
-  <!-- 添加联系人弹窗 -->
-  <div id="add-contact-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>添加联系人</h3>
-        <button class="btn-icon" id="btn-close-add-contact">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <input type="text" id="add-contact-input" placeholder="输入Gal号码添加好友">
-          <p id="add-contact-hint" class="hint-text" style="color:var(--text-secondary);font-size:12px;margin-top:4px">输入对方的Gal号码，如 GAL90IA56MH2</p>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" id="btn-confirm-add-contact">添加</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 新建聊天选项弹窗 -->
-  <div id="new-chat-options" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>新建聊天</h3>
-        <button class="btn-icon" id="btn-close-new-chat-opt">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <button class="btn btn-secondary" id="opt-new-private" style="width:100%;margin-bottom:8px">💬 新建私聊</button>
-        <button class="btn btn-secondary" id="opt-new-group" style="width:100%">👥 新建群聊</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 群聊创建弹窗 -->
-  <div id="group-chat-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>创建群聊</h3>
-        <button class="btn-icon" id="btn-close-group-chat">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>群组名称</label>
-          <input type="text" id="group-name-input" placeholder="输入群组名称">
-        </div>
-        <p style="color:var(--text-secondary);font-size:13px;margin-top:8px">选择群成员：</p>
-        <div id="group-members-list"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" id="btn-confirm-create-group">创建</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Toast通知 -->
-  <div id="toast" class="toast hidden">
-    <span id="toast-message">提示消息</span>
-  </div>
-
-  <!-- 脚本加载 -->
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/crypto.js?v=202606190029"></script>
-  <script src="/js/ui.js?v=202606190029"></script>
-  <script src="/js/auth.js?v=202606190029"></script>
-  <script src="/js/chat.js?v=202606190029"></script>
-  <script src="/js/ai.js?v=202606190029"></script>
-  <script src="/js/wallet.js?v=202606190029"></script>
-  <script src="/js/app.js?v=202606190029"></script>
-</body>
-</html>
+            <pa
