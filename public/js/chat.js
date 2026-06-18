@@ -710,9 +710,13 @@ const Chat = {
       }, message.ttl * 1000);
     }
     
-    // 添加长按撤回功能（仅自己的消息且2分钟内）
-    if (isSent && !isRecalled) {
-      this.addMessageRecallHandler(messageEl, message);
+    // 添加点击弹出操作菜单
+    if (!isRecalled) {
+      messageEl.addEventListener('click', (e) => {
+        // 避免图片预览触发菜单
+        if (e.target.tagName === 'IMG') return;
+        this.showMessageMenu(messageEl, message, isSent);
+      });
     }
     
     messagesEl.appendChild(messageEl);
@@ -907,6 +911,13 @@ const Chat = {
         type: 'image',
         ttl: null
       };
+      
+      // 附加引用消息
+      if (this.quotedMessage) {
+        message.quotedContent = this.quotedMessage.encryptedContent?.substring(0, 50) || '';
+        message.quotedSender = this.quotedMessage.nickname || '对方';
+        this.cancelQuote();
+      }
       
       // 通过Socket发送
       if (window.socket && window.socket.connected) {
@@ -1312,6 +1323,13 @@ const Chat = {
         burnAfter,
         isAnonymous
       };
+      
+      // 附加引用消息
+      if (this.quotedMessage) {
+        message.quotedContent = this.quotedMessage.encryptedContent?.substring(0, 50) || '';
+        message.quotedSender = this.quotedMessage.nickname || '对方';
+        this.cancelQuote();
+      }
       
       // 通过Socket发送
       if (window.socket && window.socket.connected) {
