@@ -14,29 +14,6 @@ const { v4: uuidv4 } = require('uuid');
 
 const db = require('./database');
 
-// 初始化数据库
-db.initDatabase();
-
-// 创建Express应用
-const app = express();
-const server = http.createServer(app);
-
-// 配置Socket.io
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
-});
-
-// 中间件
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-
-// 在线用户映射 { userId: socketId }
-const onlineUsers = new Map();
-
 // 预设的AI回复（当没有配置API Key时使用）
 const AI_FALLBACK_REPLIES = {
   'AI-NOVA000001': [
@@ -69,456 +46,374 @@ const AI_FALLBACK_REPLIES = {
   ]
 };
 
-/**
- * 获取随机预设回复
- */
 function getFallbackReply(aiGalNumber) {
   const replies = AI_FALLBACK_REPLIES[aiGalNumber] || AI_FALLBACK_REPLIES['AI-NOVA000001'];
   return replies[Math.floor(Math.random() * replies.length)];
 }
 
-// ==================== API 路由 ====================
+async function startServer() {
+  // 初始化数据库
+  await db.initDatabase();
 
-/**
- * 用户注册
- */
-app.post('/api/register', (req, res) => {
-  const { nickname, password, publicKey } = req.body;
-  
-  if (!nickname || !password) {
-    return res.status(400).json({ success: false, error: '昵称和密码不能为空' });
-  }
-  
-  if (password.length < 6) {
-    return res.status(400).json({ success: false, error: '密码至少6位' });
-  }
-  
-  const result = db.registerUser(nickname, password, publicKey);
-  
-  if (result.success) {
-    const token = uuidv4();
-    res.json({
-      success: true,
-      user: result.user,
-      token
-    });
-  } else {
-    res.status(400).json(result);
-  }
-});
+  // 创建Express应用
+  const app = express();
+  const server = http.createServer(app);
 
-/**
- * 用户登录
- */
-app.post('/api/login', (req, res) => {
-  const { galNumber, password } = req.body;
-  
-  if (!galNumber || !password) {
-    return res.status(400).json({ success: false, error: 'Gal号码和密码不能为空' });
-  }
-  
-  const result = db.loginUser(galNumber, password);
-  
-  if (result.success) {
-    const token = uuidv4();
-    res.json({
-      success: true,
-      user: result.user,
-      token
-    });
-  } else {
-    res.status(401).json(result);
-  }
-});
-
-/**
- * 获取用户信息
- */
-app.get('/api/user/:galNumber', (req, res) => {
-  const user = db.getUserByGal(req.params.galNumber);
-  
-  if (user) {
-    res.json({
-      success: true,
-      user: {
-        galNumber: user.gal_number,
-        nickname: user.nickname,
-        avatar: user.avatar,
-        publicKey: user.public_key,
-        isOnline: onlineUsers.has(user.id)
-      }
-    });
-  } else {
-    res.status(404).json({ success: false, error: '用户不存在' });
-  }
-});
-
-/**
- * 更新用户资料
- */
-app.put('/api/user', (req, res) => {
-  const { userId, nickname, avatar, publicKey } = req.body;
-  
-  if (!userId) {
-    return res.status(400).json({ success: false, error: '缺少用户ID' });
-  }
-  
-  const success = db.updateUser(userId, { nickname, avatar, public_key: publicKey });
-  res.json({ success });
-});
-
-/**
- * 获取联系人列表
- */
-app.get('/api/contacts', (req, res) => {
-  const userId = parseInt(req.query.userId);
-  
-  if (!userId) {
-    return res.status(400).json({ success: false, error: '缺少用户ID' });
-  }
-  
-  const contacts = db.getContacts(userId).map(c => ({
-    ...c,
-    galNumber: c.gal_number,
-    isOnline: onlineUsers.has(c.id)
-  }));
-  
-  res.json({ success: true, contacts });
-});
-
-/**
- * 添加联系人
- */
-app.post('/api/contacts/add', (req, res) => {
-  const { userId, contactGal } = req.body;
-  
-  if (!userId || !contactGal) {
-    return res.status(400).json({ success: false, error: '参数不完整' });
-  }
-  
-  const result = db.addContact(userId, contactGal);
-  res.json(result);
-});
-
-/**
- * 接受好友请求
- */
-app.post('/api/contacts/accept', (req, res) => {
-  const { userId, contactId } = req.body;
-  
-  if (!userId || !contactId) {
-    return res.status(400).json({ success: false, error: '参数不完整' });
-  }
-  
-  const success = db.acceptContact(userId, parseInt(contactId));
-  res.json({ success });
-});
-
-/**
- * 获取聊天列表
- */
-app.get('/api/chats', (req, res) => {
-  const userId = parseInt(req.query.userId);
-  
-  if (!userId) {
-    return res.status(400).json({ success: false, error: '缺少用户ID' });
-  }
-  
-  const chats = db.getChats(userId);
-  const enrichedChats = chats.map(chat => {
-    const members = db.getChatMembers(chat.id);
-    return {
-      ...chat,
-      members: members.map(m => ({
-        id: m.id,
-        galNumber: m.gal_number,
-        nickname: m.nickname,
-        avatar: m.avatar
-      }))
-    };
+  const io = new Server(server, {
+    cors: {
+      origin: '*',
+      methods: ['GET', 'POST']
+    }
   });
-  
-  res.json({ success: true, chats: enrichedChats });
-});
 
-/**
- * 创建聊天
- */
-app.post('/api/chats', (req, res) => {
-  const { type, name, userId, memberIds } = req.body;
-  
-  if (!type || !userId) {
-    return res.status(400).json({ success: false, error: '参数不完整' });
-  }
-  
-  let chatId;
-  
-  if (type === 'private' && memberIds && memberIds.length > 0) {
-    chatId = db.createPrivateChat(userId, memberIds[0]);
-  } else if (type === 'group' && name) {
-    chatId = db.createGroupChat(name, userId);
-    if (memberIds && memberIds.length > 0) {
-      for (const memberId of memberIds) {
-        if (memberId !== userId) {
-          db.addChatMember(chatId, memberId);
+  // 中间件
+  app.use(cors());
+  app.use(express.json());
+  app.use(express.static(path.join(__dirname, 'public')));
+
+  // 在线用户映射
+  const onlineUsers = new Map();
+
+  // ==================== API 路由 ====================
+
+  app.post('/api/register', (req, res) => {
+    const { nickname, password, publicKey } = req.body;
+    if (!nickname || !password) {
+      return res.status(400).json({ success: false, error: '昵称和密码不能为空' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, error: '密码至少6位' });
+    }
+    const result = db.registerUser(nickname, password, publicKey);
+    if (result.success) {
+      const token = uuidv4();
+      res.json({ success: true, user: result.user, token });
+    } else {
+      res.status(400).json(result);
+    }
+  });
+
+  app.post('/api/login', (req, res) => {
+    const { galNumber, password } = req.body;
+    if (!galNumber || !password) {
+      return res.status(400).json({ success: false, error: 'Gal号码和密码不能为空' });
+    }
+    const result = db.loginUser(galNumber, password);
+    if (result.success) {
+      const token = uuidv4();
+      res.json({ success: true, user: result.user, token });
+    } else {
+      res.status(401).json(result);
+    }
+  });
+
+  app.get('/api/user/:galNumber', (req, res) => {
+    const user = db.getUserByGal(req.params.galNumber);
+    if (user) {
+      res.json({
+        success: true,
+        user: {
+          galNumber: user.gal_number,
+          nickname: user.nickname,
+          avatar: user.avatar,
+          publicKey: user.public_key,
+          isOnline: onlineUsers.has(user.id)
+        }
+      });
+    } else {
+      res.status(404).json({ success: false, error: '用户不存在' });
+    }
+  });
+
+  app.put('/api/user', (req, res) => {
+    const { userId, nickname, avatar, publicKey } = req.body;
+    if (!userId) {
+      return res.status(400).json({ success: false, error: '缺少用户ID' });
+    }
+    const success = db.updateUser(userId, { nickname, avatar, public_key: publicKey });
+    res.json({ success });
+  });
+
+  app.get('/api/contacts', (req, res) => {
+    const userId = parseInt(req.query.userId);
+    if (!userId) {
+      return res.status(400).json({ success: false, error: '缺少用户ID' });
+    }
+    const contacts = db.getContacts(userId).map(c => ({
+      ...c,
+      galNumber: c.gal_number,
+      isOnline: onlineUsers.has(c.id)
+    }));
+    res.json({ success: true, contacts });
+  });
+
+  app.post('/api/contacts/add', (req, res) => {
+    const { userId, contactGal } = req.body;
+    if (!userId || !contactGal) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    const result = db.addContact(userId, contactGal);
+    res.json(result);
+  });
+
+  app.post('/api/contacts/accept', (req, res) => {
+    const { userId, contactId } = req.body;
+    if (!userId || !contactId) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    const success = db.acceptContact(userId, parseInt(contactId));
+    res.json({ success });
+  });
+
+  app.get('/api/chats', (req, res) => {
+    const userId = parseInt(req.query.userId);
+    if (!userId) {
+      return res.status(400).json({ success: false, error: '缺少用户ID' });
+    }
+    const chats = db.getChats(userId);
+    const enrichedChats = chats.map(chat => {
+      const members = db.getChatMembers(chat.id);
+      return {
+        ...chat,
+        members: members.map(m => ({
+          id: m.id,
+          galNumber: m.gal_number,
+          nickname: m.nickname,
+          avatar: m.avatar
+        }))
+      };
+    });
+    res.json({ success: true, chats: enrichedChats });
+  });
+
+  app.post('/api/chats', (req, res) => {
+    const { type, name, userId, memberIds } = req.body;
+    if (!type || !userId) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    let chatId;
+    if (type === 'private' && memberIds && memberIds.length > 0) {
+      chatId = db.createPrivateChat(userId, memberIds[0]);
+    } else if (type === 'group' && name) {
+      chatId = db.createGroupChat(name, userId);
+      if (memberIds && memberIds.length > 0) {
+        for (const memberId of memberIds) {
+          if (memberId !== userId) {
+            db.addChatMember(chatId, memberId);
+          }
         }
       }
+    } else {
+      return res.status(400).json({ success: false, error: '参数不完整' });
     }
-  } else {
-    return res.status(400).json({ success: false, error: '参数不完整' });
-  }
-  
-  const members = db.getChatMembers(chatId);
-  res.json({
-    success: true,
-    chat: {
-      id: chatId,
-      type,
-      name: name || '私聊',
-      members: members.map(m => ({
-        id: m.id,
-        galNumber: m.gal_number,
-        nickname: m.nickname,
-        avatar: m.avatar
-      }))
-    }
+    const members = db.getChatMembers(chatId);
+    res.json({
+      success: true,
+      chat: {
+        id: chatId,
+        type,
+        name: name || '私聊',
+        members: members.map(m => ({
+          id: m.id,
+          galNumber: m.gal_number,
+          nickname: m.nickname,
+          avatar: m.avatar
+        }))
+      }
+    });
   });
-});
 
-/**
- * 获取聊天消息
- */
-app.get('/api/chats/:id/messages', (req, res) => {
-  const chatId = parseInt(req.params.id);
-  const limit = parseInt(req.query.limit) || 50;
-  const offset = parseInt(req.query.offset) || 0;
-  
-  const messages = db.getMessages(chatId, limit, offset).map(m => ({
-    id: m.id,
-    chatId: m.chat_id,
-    senderId: m.sender_id,
-    galNumber: m.gal_number,
-    nickname: m.nickname,
-    avatar: m.avatar,
-    encryptedContent: m.encrypted_content,
-    type: m.type,
-    ttl: m.ttl,
-    readBy: m.read_by,
-    createdAt: m.created_at
-  }));
-  
-  res.json({ success: true, messages });
-});
+  app.get('/api/chats/:id/messages', (req, res) => {
+    const chatId = parseInt(req.params.id);
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    const messages = db.getMessages(chatId, limit, offset).map(m => ({
+      id: m.id,
+      chatId: m.chat_id,
+      senderId: m.sender_id,
+      galNumber: m.gal_number,
+      nickname: m.nickname,
+      avatar: m.avatar,
+      encryptedContent: m.encrypted_content,
+      type: m.type,
+      ttl: m.ttl,
+      readBy: m.read_by,
+      createdAt: m.created_at
+    }));
+    res.json({ success: true, messages });
+  });
 
-/**
- * AI对话接口
- */
-app.post('/api/ai/chat', async (req, res) => {
-  const { aiGalNumber, message, history } = req.body;
-  
-  if (!aiGalNumber || !message) {
-    return res.status(400).json({ success: false, error: '参数不完整' });
-  }
-  
-  const persona = db.getAIPersona(aiGalNumber);
-  
-  if (!persona) {
-    return res.status(404).json({ success: false, error: 'AI人格不存在' });
-  }
-  
-  // 如果配置了DeepSeek API
-  if (process.env.DEEPSEEK_API_KEY) {
-    try {
-      const response = await fetch('https://api.deepseek.com/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [
-            { role: 'system', content: persona.system_prompt },
-            ...(history || []).map(h => ({
-              role: h.isUser ? 'user' : 'assistant',
-              content: h.content
-            })),
-            { role: 'user', content: message }
-          ],
-          stream: false
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.choices && data.choices[0]) {
-        return res.json({
-          success: true,
-          reply: data.choices[0].message.content,
-          aiName: persona.name,
-          aiGal: persona.gal_number,
-          aiAvatar: persona.avatar
+  app.post('/api/ai/chat', async (req, res) => {
+    const { aiGalNumber, message, history } = req.body;
+    if (!aiGalNumber || !message) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    const persona = db.getAIPersona(aiGalNumber);
+    if (!persona) {
+      return res.status(404).json({ success: false, error: 'AI人格不存在' });
+    }
+    if (process.env.DEEPSEEK_API_KEY) {
+      try {
+        const response = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: [
+              { role: 'system', content: persona.system_prompt },
+              ...(history || []).map(h => ({
+                role: h.isUser ? 'user' : 'assistant',
+                content: h.content
+              })),
+              { role: 'user', content: message }
+            ],
+            stream: false
+          })
         });
+        const data = await response.json();
+        if (data.choices && data.choices[0]) {
+          return res.json({
+            success: true,
+            reply: data.choices[0].message.content,
+            aiName: persona.name,
+            aiGal: persona.gal_number,
+            aiAvatar: persona.avatar
+          });
+        }
+      } catch (error) {
+        console.error('DeepSeek API错误:', error);
       }
-    } catch (error) {
-      console.error('DeepSeek API错误:', error);
     }
-  }
-  
-  // 使用预设回复作为降级方案
-  const reply = getFallbackReply(aiGalNumber);
-  res.json({
-    success: true,
-    reply,
-    aiName: persona.name,
-    aiGal: persona.gal_number,
-    aiAvatar: persona.avatar,
-    isFallback: true
+    const reply = getFallbackReply(aiGalNumber);
+    res.json({
+      success: true,
+      reply,
+      aiName: persona.name,
+      aiGal: persona.gal_number,
+      aiAvatar: persona.avatar,
+      isFallback: true
+    });
   });
-});
 
-/**
- * 获取AI人格列表
- */
-app.get('/api/ai/personas', (req, res) => {
-  const personas = db.getAIPersonas().map(p => ({
-    id: p.id,
-    galNumber: p.gal_number,
-    name: p.name,
-    avatar: p.avatar,
-    systemPrompt: p.system_prompt
-  }));
-  
-  res.json({ success: true, personas });
-});
+  app.get('/api/ai/personas', (req, res) => {
+    const personas = db.getAIPersonas().map(p => ({
+      id: p.id,
+      galNumber: p.gal_number,
+      name: p.name,
+      avatar: p.avatar,
+      systemPrompt: p.system_prompt
+    }));
+    res.json({ success: true, personas });
+  });
 
-/**
- * 创建测试钱包地址（简化版）
- */
-app.post('/api/wallet/create', (req, res) => {
-  // 生成一个模拟的以太坊风格地址
-  const chars = '0123456789abcdef';
-  let address = '0x';
-  for (let i = 0; i < 40; i++) {
-    address += chars[Math.floor(Math.random() * chars.length)];
-  }
-  
-  res.json({
-    success: true,
-    address,
-    balance: '1.0000', // 测试网代币
-    privateKey: null // 不返回私钥，只在前端生成
+  app.post('/api/wallet/create', (req, res) => {
+    const chars = '0123456789abcdef';
+    let address = '0x';
+    for (let i = 0; i < 40; i++) {
+      address += chars[Math.floor(Math.random() * chars.length)];
+    }
+    res.json({
+      success: true,
+      address,
+      balance: '1.0000',
+      privateKey: null
+    });
   });
-});
 
-// ==================== Socket.io 事件处理 ====================
+  // ==================== Socket.io 事件处理 ====================
 
-io.on('connection', (socket) => {
-  console.log('🔌 用户连接:', socket.id);
-  
-  // 用户上线
-  socket.on('user-online', (userId) => {
-    onlineUsers.set(userId, socket.id);
-    socket.userId = userId;
-    io.emit('user-status', { userId, status: 'online' });
-    console.log(`📱 用户 ${userId} 上线`);
-  });
-  
-  // 加入聊天
-  socket.on('join-chat', (chatId) => {
-    socket.join(`chat-${chatId}`);
-    console.log(`💬 用户 ${socket.userId} 加入聊天 ${chatId}`);
-  });
-  
-  // 离开聊天
-  socket.on('leave-chat', (chatId) => {
-    socket.leave(`chat-${chatId}`);
-    console.log(`👋 用户 ${socket.userId} 离开聊天 ${chatId}`);
-  });
-  
-  // 发送消息
-  socket.on('send-message', async (data) => {
-    const { chatId, senderId, encryptedContent, type, ttl } = data;
+  io.on('connection', (socket) => {
+    console.log('🔌 用户连接:', socket.id);
     
-    try {
-      // 保存消息到数据库
-      const messageId = db.saveMessage(chatId, senderId, encryptedContent, type, ttl);
-      
-      const sender = db.getUserById(senderId);
-      
-      const messageData = {
-        id: messageId,
-        chatId,
-        senderId,
-        galNumber: sender ? sender.gal_number : 'ANONYMOUS',
-        nickname: sender ? sender.nickname : '匿名',
-        avatar: sender ? sender.avatar : 'anonymous',
-        encryptedContent,
-        type: type || 'normal',
-        ttl: ttl || null,
-        createdAt: new Date().toISOString()
-      };
-      
-      // 广播消息到聊天房间
-      io.to(`chat-${chatId}`).emit('new-message', messageData);
-      
-      // 阅后即焚消息处理
-      if (type === 'self-destruct' && ttl) {
-        setTimeout(() => {
-          db.deleteMessage(messageId);
-          io.to(`chat-${chatId}`).emit('message-destroyed', { messageId });
-        }, ttl * 1000);
+    socket.on('user-online', (userId) => {
+      onlineUsers.set(userId, socket.id);
+      socket.userId = userId;
+      io.emit('user-status', { userId, status: 'online' });
+    });
+    
+    socket.on('join-chat', (chatId) => {
+      socket.join(`chat-${chatId}`);
+    });
+    
+    socket.on('leave-chat', (chatId) => {
+      socket.leave(`chat-${chatId}`);
+    });
+    
+    socket.on('send-message', async (data) => {
+      const { chatId, senderId, encryptedContent, type, ttl } = data;
+      try {
+        const messageId = db.saveMessage(chatId, senderId, encryptedContent, type, ttl);
+        const sender = db.getUserById(senderId);
+        const messageData = {
+          id: messageId,
+          chatId,
+          senderId,
+          galNumber: sender ? sender.gal_number : 'ANONYMOUS',
+          nickname: sender ? sender.nickname : '匿名',
+          avatar: sender ? sender.avatar : 'anonymous',
+          encryptedContent,
+          type: type || 'normal',
+          ttl: ttl || null,
+          createdAt: new Date().toISOString()
+        };
+        io.to(`chat-${chatId}`).emit('new-message', messageData);
+        if (type === 'self-destruct' && ttl) {
+          setTimeout(() => {
+            db.deleteMessage(messageId);
+            io.to(`chat-${chatId}`).emit('message-destroyed', { messageId });
+          }, ttl * 1000);
+        }
+      } catch (error) {
+        console.error('发送消息失败:', error);
+        socket.emit('error', { message: '发送消息失败' });
       }
-      
-      console.log(`📨 消息已发送: 聊天 ${chatId}, 发送者 ${senderId}`);
-    } catch (error) {
-      console.error('发送消息失败:', error);
-      socket.emit('error', { message: '发送消息失败' });
+    });
+    
+    socket.on('typing', (data) => {
+      const { chatId, userId, nickname } = data;
+      socket.to(`chat-${chatId}`).emit('user-typing', { userId, nickname });
+    });
+    
+    socket.on('stop-typing', (data) => {
+      const { chatId, userId } = data;
+      socket.to(`chat-${chatId}`).emit('user-stop-typing', { userId });
+    });
+    
+    socket.on('message-read', (data) => {
+      const { messageId, chatId, userId } = data;
+      db.markMessageRead(chatId, userId, messageId);
+      io.to(`chat-${chatId}`).emit('message-read-by', { messageId, userId });
+    });
+    
+    socket.on('disconnect', () => {
+      if (socket.userId) {
+        onlineUsers.delete(socket.userId);
+        io.emit('user-status', { userId: socket.userId, status: 'offline' });
+      }
+    });
+  });
+
+  // ==================== 启动服务器 ====================
+
+  const PORT = process.env.PORT || 3000;
+
+  server.listen(PORT, () => {
+    console.log('═══════════════════════════════════════════');
+    console.log('🚀 Nova-OS 服务器启动成功！');
+    console.log(`🌐 访问地址: http://localhost:${PORT}`);
+    console.log('═══════════════════════════════════════════');
+    
+    if (!process.env.DEEPSEEK_API_KEY) {
+      console.log('⚠️  提示: 未配置 DeepSeek API Key，AI将使用预设回复');
+      console.log('💡 如需启用真实AI，请设置环境变量 DEEPSEEK_API_KEY');
     }
   });
-  
-  // 正在输入
-  socket.on('typing', (data) => {
-    const { chatId, userId, nickname } = data;
-    socket.to(`chat-${chatId}`).emit('user-typing', { userId, nickname });
-  });
-  
-  // 停止输入
-  socket.on('stop-typing', (data) => {
-    const { chatId, userId } = data;
-    socket.to(`chat-${chatId}`).emit('user-stop-typing', { userId });
-  });
-  
-  // 消息已读
-  socket.on('message-read', (data) => {
-    const { messageId, chatId, userId } = data;
-    db.markMessageRead(chatId, userId, messageId);
-    io.to(`chat-${chatId}`).emit('message-read-by', { messageId, userId });
-  });
-  
-  // 用户下线
-  socket.on('disconnect', () => {
-    if (socket.userId) {
-      onlineUsers.delete(socket.userId);
-      io.emit('user-status', { userId: socket.userId, status: 'offline' });
-      console.log(`📴 用户 ${socket.userId} 下线`);
-    }
-    console.log('🔌 连接断开:', socket.id);
-  });
-});
+}
 
-// ==================== 启动服务器 ====================
-
-const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
-  console.log('═══════════════════════════════════════════');
-  console.log('🚀 Nova-OS 服务器启动成功！');
-  console.log(`🌐 访问地址: http://localhost:${PORT}`);
-  console.log('═══════════════════════════════════════════');
-  
-  if (!process.env.DEEPSEEK_API_KEY) {
-    console.log('⚠️  提示: 未配置 DeepSeek API Key，AI将使用预设回复');
-    console.log('💡 如需启用真实AI，请在 .env 文件中设置 DEEPSEEK_API_KEY');
-  }
+startServer().catch(err => {
+  console.error('服务器启动失败:', err);
+  process.exit(1);
 });
