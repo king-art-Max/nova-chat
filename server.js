@@ -301,6 +301,7 @@ async function startServer() {
         return res.status(404).json({ success: false, error: 'AI人格不存在' });
       }
       if (process.env.DEEPSEEK_API_KEY) {
+        console.log('🔑 调用DeepSeek API, Key前6位:', process.env.DEEPSEEK_API_KEY.substring(0, 6));
         try {
           const response = await fetch('https://api.deepseek.com/chat/completions', {
             method: 'POST',
@@ -322,7 +323,11 @@ async function startServer() {
             })
           });
           const data = await response.json();
-          if (data.choices && data.choices[0]) {
+          console.log('📡 DeepSeek响应:', JSON.stringify(data).substring(0, 200));
+          if (data.error) {
+            console.error('❌ DeepSeek API错误:', data.error);
+            // 降级到预设回复
+          } else if (data.choices && data.choices[0]) {
             return res.json({
               success: true,
               reply: data.choices[0].message.content,
@@ -332,8 +337,10 @@ async function startServer() {
             });
           }
         } catch (error) {
-          console.error('DeepSeek API错误:', error);
+          console.error('❌ DeepSeek请求失败:', error.message);
         }
+      } else {
+        console.log('⚠️ 未配置DEEPSEEK_API_KEY环境变量');
       }
       const reply = getFallbackReply(aiGalNumber);
       res.json({
