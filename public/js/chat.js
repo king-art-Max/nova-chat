@@ -25,9 +25,44 @@ const Chat = {
    * 绑定UI事件
    */
   bindEvents() {
-    // 新建聊天按钮
-    document.getElementById('btn-new-chat').addEventListener('click', () => {
-      this.showNewChatModal();
+    // 新建聊天按钮（长按弹出选项）
+    const fab = document.getElementById('btn-new-chat');
+    let pressTimer;
+    let isLongPress = false;
+    
+    fab.addEventListener('mousedown', (e) => {
+      isLongPress = false;
+      pressTimer = setTimeout(() => {
+        isLongPress = true;
+        this.showNewChatOptions();
+      }, 500);
+    });
+    
+    fab.addEventListener('mouseup', (e) => {
+      clearTimeout(pressTimer);
+      if (!isLongPress) {
+        this.showNewChatModal();
+      }
+    });
+    
+    fab.addEventListener('mouseleave', () => {
+      clearTimeout(pressTimer);
+    });
+    
+    // 触摸事件
+    fab.addEventListener('touchstart', (e) => {
+      isLongPress = false;
+      pressTimer = setTimeout(() => {
+        isLongPress = true;
+        this.showNewChatOptions();
+      }, 500);
+    });
+    
+    fab.addEventListener('touchend', (e) => {
+      clearTimeout(pressTimer);
+      if (!isLongPress) {
+        this.showNewChatModal();
+      }
     });
     
     // 返回按钮
@@ -67,6 +102,52 @@ const Chat = {
       btn.classList.toggle('active');
       UI.showToast(btn.classList.contains('active') ? '匿踪模式已开启' : '匿踪模式已关闭');
     });
+    
+    // 图片发送按钮
+    const imgBtn = document.getElementById('btn-send-image');
+    if (imgBtn) {
+      imgBtn.addEventListener('click', () => {
+        this.selectImage();
+      });
+    }
+    
+    // 图片输入变化
+    const imgInput = document.getElementById('image-input');
+    if (imgInput) {
+      imgInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+          this.handleImageSelected(e.target.files[0]);
+        }
+      });
+    }
+  },
+  
+  /**
+   * 显示新建聊天选项（长按弹出）
+   */
+  showNewChatOptions() {
+    UI.showModal('新建聊天', `
+      <div class="new-chat-options">
+        <button class="btn btn-primary" style="width:100%;margin-bottom:12px;" id="opt-new-private">
+          💬 新建私聊
+        </button>
+        <button class="btn btn-secondary" style="width:100%;" id="opt-new-group">
+          👥 新建群聊
+        </button>
+      </div>
+    `, [
+      { text: '取消', class: 'btn-secondary' }
+    ]);
+    
+    document.getElementById('opt-new-private').addEventListener('click', () => {
+      UI.closeModal();
+      this.showNewChatModal();
+    });
+    
+    document.getElementById('opt-new-group').addEventListener('click', () => {
+      UI.closeModal();
+      this.showCreateGroupModal();
+    });
   },
   
   /**
@@ -100,6 +181,17 @@ const Chat = {
               const chatId = parseInt(item.dataset.chatId);
               this.openChat(chatId);
             });
+            
+            // 长按查看详情
+            let pressTimer;
+            item.addEventListener('touchstart', () => {
+              pressTimer = setTimeout(() => {
+                // 显示聊天详情
+              }, 500);
+            });
+            item.addEventListener('touchend', () => {
+              clearTimeout(pressTimer);
+            });
           });
         }
       }
@@ -113,12 +205,12 @@ const Chat = {
    */
   showNewChatModal() {
     UI.showInputModal(
-      '新建聊天',
+      '新建私聊',
       '输入对方的Gal号码',
-      'Gal://XXXXXXXXXXXX',
+      'GALXXXXXXXXXXX',
       async (galNumber) => {
         // 移除 Gal:// 前缀
-        const cleanGal = galNumber.replace('Gal://', '');
+        const cleanGal = galNumber.replace('Gal://', '').replace('gal://', '').toUpperCase();
         
         // 获取对方信息
         try {
@@ -136,6 +228,61 @@ const Chat = {
         }
       }
     );
+  },
+  
+  /**
+   * 显示创建群聊模态框
+   */
+  showCreateGroupModal() {
+    // 获取好友列表
+    const friends = Contacts.contacts || [];
+    
+    if (friends.length === 0) {
+      UI.showToast('请先添加好友后再创建群聊');
+      return;
+    }
+    
+    UI.showModal('创建群聊', `
+      <div class="form-group">
+        <label>群聊名称</label>
+        <input type="text" id="group-name-input" placeholder="输入群聊名称" maxlength="20">
+      </div>
+      <div class="form-group">
+        <label>选择成员（点击勾选）</label>
+        <div class="group-member-select" id="group-member-list">
+          ${friends.map(f => `
+            <div class="member-option" data-id="${f.id}" data-gal="${f.galNumber}">
+              <input type="checkbox" id="member-${f.id}">
+              <label for="member-${f.id}">
+                ${UI.avatarMap[f.avatar] || '👤'} ${UI.escapeHtml(f.nickname)}
+              </label>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `, [
+      { text: '取消', class: 'btn-secondary' },
+      { text: '创建', class: 'btn-primary', closeOnClick: false, onClick: () => {
+        const name = document.getElementById('group-name-input').value.trim();
+        if (!name) {
+          UI.showToast('请输入群聊名称');
+          return;
+        }
+        
+        const selectedIds = [];
+        document.querySelectorAll('#group-member-list input:checked').forEach(cb => {
+          selectedIds.push(parseInt(cb.id.replace('member-', '')));
+        });
+        
+        if (selectedIds.length === 0) {
+          UI.showToast('请至少选择一位成员');
+          return;
+        }
+        
+        this.createGroupChat(name, selectedIds);
+        UI.closeModal();
+      }}
+    ]);
   },
   
   /**
@@ -158,11 +305,19 @@ const Chat = {
       if (data.success) {
         // 缓存联系人公钥
         if (contactInfo.publicKey) {
-          this.userPublicKeys[contactId] = JSON.parse(contactInfo.publicKey);
+          this.userPublicKeys[contactId] = typeof contactInfo.publicKey === 'string' 
+            ? JSON.parse(contactInfo.publicKey) 
+            : contactInfo.publicKey;
+        } else {
+          // 尝试从API获取公钥
+          this.fetchUserPublicKey(contactId);
         }
         
         // 打开聊天窗口
-        this.openChat(data.chat.id, contactInfo);
+        this.openChat(data.chat.id, {
+          ...contactInfo,
+          id: contactId
+        });
         
         // 刷新聊天列表
         this.loadChatList();
@@ -170,6 +325,30 @@ const Chat = {
     } catch (error) {
       console.error('创建私聊失败:', error);
       UI.showToast('创建聊天失败');
+    }
+  },
+  
+  /**
+   * 获取用户公钥
+   */
+  async fetchUserPublicKey(userId) {
+    try {
+      const response = await fetch(`/api/chats?userId=${Auth.getCurrentUserId()}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        for (const chat of data.chats) {
+          const member = chat.members?.find(m => m.id === userId);
+          if (member?.publicKey) {
+            this.userPublicKeys[userId] = typeof member.publicKey === 'string'
+              ? JSON.parse(member.publicKey)
+              : member.publicKey;
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('获取公钥失败:', error);
     }
   },
   
@@ -192,11 +371,15 @@ const Chat = {
       const data = await response.json();
       
       if (data.success) {
+        UI.showToast('群聊创建成功 🎉');
         this.loadChatList();
+        // 打开群聊
+        this.openChat(data.chat.id, data.chat);
         return data.chat.id;
       }
     } catch (error) {
       console.error('创建群聊失败:', error);
+      UI.showToast('创建群聊失败');
     }
     return null;
   },
@@ -216,15 +399,32 @@ const Chat = {
     const messagesEl = document.getElementById('chat-messages');
     
     if (contactInfo) {
-      chatInfoEl.innerHTML = `
-        <span class="chat-name">${contactInfo.nickname}</span>
-        <span class="chat-status">${contactInfo.isOnline ? '在线' : '离线'}</span>
-      `;
-      this.currentChat.members = [contactInfo];
+      const isGroup = contactInfo.type === 'group' || (contactInfo.members && contactInfo.members.length > 2);
       
-      // 缓存公钥
-      if (contactInfo.publicKey) {
-        this.userPublicKeys[contactInfo.id] = JSON.parse(contactInfo.publicKey);
+      if (isGroup) {
+        this.currentChat.type = 'group';
+        this.currentChat.members = contactInfo.members || [];
+        chatInfoEl.innerHTML = `
+          <span class="chat-name">${contactInfo.name || '群聊'}</span>
+          <span class="chat-status">${(contactInfo.members?.length || 0) + 1} 人</span>
+        `;
+      } else {
+        this.currentChat.members = [contactInfo];
+        chatInfoEl.innerHTML = `
+          <span class="chat-name">${contactInfo.nickname}</span>
+          <span class="chat-status">${contactInfo.isOnline ? '在线' : '离线'}</span>
+        `;
+        
+        // 缓存公钥
+        if (contactInfo.publicKey) {
+          try {
+            this.userPublicKeys[contactInfo.id] = typeof contactInfo.publicKey === 'string'
+              ? JSON.parse(contactInfo.publicKey)
+              : contactInfo.publicKey;
+          } catch (e) {
+            console.warn('公钥解析失败:', e);
+          }
+        }
       }
     } else {
       // 从服务器获取聊天信息
@@ -262,7 +462,6 @@ const Chat = {
           this.currentChat = chat;
           
           const chatInfoEl = document.getElementById('chat-info');
-          const otherMember = chat.members?.find(m => m.id !== Auth.getCurrentUserId());
           
           if (chat.type === 'group') {
             chatInfoEl.innerHTML = `
@@ -270,6 +469,7 @@ const Chat = {
               <span class="chat-status">${chat.members?.length || 0} 人</span>
             `;
           } else {
+            const otherMember = chat.members?.find(m => m.id !== Auth.getCurrentUserId());
             chatInfoEl.innerHTML = `
               <span class="chat-name">${otherMember?.nickname || '未知用户'}</span>
               <span class="chat-status">在线</span>
@@ -277,7 +477,13 @@ const Chat = {
             
             // 缓存公钥
             if (otherMember?.publicKey) {
-              this.userPublicKeys[otherMember.id] = JSON.parse(otherMember.publicKey);
+              try {
+                this.userPublicKeys[otherMember.id] = typeof otherMember.publicKey === 'string'
+                  ? JSON.parse(otherMember.publicKey)
+                  : otherMember.publicKey;
+              } catch (e) {
+                console.warn('公钥解析失败:', e);
+              }
             }
           }
         }
@@ -303,7 +509,7 @@ const Chat = {
         messagesEl.innerHTML = '';
         
         for (const message of messages) {
-          await this.displayMessage(message, message.sender_id === Auth.getCurrentUserId());
+          await this.displayMessage(message, message.senderId === Auth.getCurrentUserId());
         }
         
         // 滚动到底部
@@ -322,56 +528,109 @@ const Chat = {
     const messageEl = document.createElement('div');
     messageEl.className = `message ${isSent ? 'sent' : 'received'} ${message.type || ''}`;
     messageEl.dataset.messageId = message.id;
+    messageEl.dataset.senderId = message.senderId;
+    
+    // 检查是否已撤回
+    const isRecalled = message.isRecalled || message.encryptedContent === '[此消息已撤回]';
     
     // 解密消息内容
     let content = message.encryptedContent;
-    try {
-      if (message.encryptedContent && !message.encryptedContent.startsWith('{')) {
-        // 消息是加密的，尝试解密
-        const parts = message.encryptedContent.split(':');
-        if (parts.length === 3) {
-          const [iv, ciphertext, senderPublicKey] = parts;
-          
-          // 从缓存或消息中获取发送者公钥
-          let senderKey = this.userPublicKeys[message.senderId];
-          if (!senderKey && senderPublicKey) {
-            senderKey = JSON.parse(senderPublicKey);
+    let isEncrypted = false;
+    
+    if (isRecalled) {
+      content = '此消息已撤回';
+    } else if (message.encryptedContent) {
+      try {
+        // 检查是否为加密格式 (iv:ciphertext:publicKey)
+        if (message.encryptedContent.includes(':') && !message.encryptedContent.startsWith('{')) {
+          const parts = message.encryptedContent.split(':');
+          if (parts.length >= 2) {
+            isEncrypted = true;
+            const [iv, ciphertext, senderPublicKey] = parts;
+            
+            // 从缓存或消息中获取发送者公钥
+            let senderKey = this.userPublicKeys[message.senderId];
+            if (!senderKey && senderPublicKey) {
+              try {
+                senderKey = JSON.parse(senderPublicKey);
+                this.userPublicKeys[message.senderId] = senderKey;
+              } catch (e) {}
+            }
+            
+            if (senderKey && NovaCrypto && NovaCrypto.privateKey) {
+              content = await NovaCrypto.decryptMessage(iv, ciphertext, senderKey);
+            } else {
+              // 没有密钥，显示明文提示
+              content = '🔒 加密消息（无法解密）';
+            }
           }
-          
-          if (senderKey) {
-            content = await NovaCrypto.decryptMessage(iv, ciphertext, senderKey);
+        } else if (message.encryptedContent.startsWith('{')) {
+          // JSON格式，可能是图片或其他类型
+          const parsed = JSON.parse(message.encryptedContent);
+          if (parsed.type === 'image' && parsed.content) {
+            // 图片消息
+            content = parsed.content;
+            message.isImage = true;
+          } else if (parsed.plain) {
+            // 明文消息
+            content = parsed.content;
+          } else {
+            content = parsed.content || parsed;
           }
+        } else {
+          // 普通文本消息
+          content = message.encryptedContent;
         }
-      } else if (message.encryptedContent) {
-        // 消息未加密（JSON格式）
-        const parsed = JSON.parse(message.encryptedContent);
-        content = parsed.content || parsed;
+      } catch (error) {
+        console.error('解密消息失败:', error);
+        content = message.encryptedContent;
       }
-    } catch (error) {
-      console.error('解密消息失败:', error);
-      content = '【无法解密的消息】';
     }
     
     // 匿踪消息显示特殊发送者
     const senderName = message.type === 'anonymous' ? '来自星星的你' : message.nickname;
     
-    messageEl.innerHTML = `
-      ${!isSent ? `
+    // 构建消息HTML
+    let messageHTML = '';
+    
+    if (!isSent) {
+      messageHTML += `
         <div class="message-header">
           <span class="message-sender">${senderName}</span>
+          ${isEncrypted ? '<span class="encrypt-icon">🔒</span>' : ''}
           <span class="message-time">${UI.formatFullTime(message.createdAt)}</span>
         </div>
-      ` : `
+      `;
+    } else {
+      messageHTML += `
         <div class="message-header">
+          ${isEncrypted ? '<span class="encrypt-icon">🔒</span>' : ''}
           <span class="message-time">${UI.formatFullTime(message.createdAt)}</span>
         </div>
-      `}
-      <div class="message-content">${UI.escapeHtml(content)}</div>
-      ${isSent ? `<div class="message-status">✓</div>` : ''}
-    `;
+      `;
+    }
+    
+    // 消息内容
+    if (isRecalled) {
+      messageHTML += `<div class="message-content recalled">${UI.escapeHtml(content)}</div>`;
+    } else if (message.isImage) {
+      messageHTML += `
+        <div class="message-content">
+          <img src="${content}" class="chat-image" onclick="Chat.previewImage('${content}')">
+        </div>
+      `;
+    } else {
+      messageHTML += `<div class="message-content">${UI.escapeHtml(content)}</div>`;
+    }
+    
+    if (isSent) {
+      messageHTML += `<div class="message-status">✓</div>`;
+    }
+    
+    messageEl.innerHTML = messageHTML;
     
     // 添加销毁进度条（如果需要）
-    if (message.type === 'self-destruct' && message.ttl) {
+    if (message.type === 'self-destruct' && message.ttl && !isRecalled) {
       const progressBar = document.createElement('div');
       progressBar.className = 'destroy-progress';
       progressBar.style.animationDuration = `${message.ttl}s`;
@@ -381,6 +640,11 @@ const Chat = {
       setTimeout(() => {
         this.destroyMessage(message.id);
       }, message.ttl * 1000);
+    }
+    
+    // 添加长按撤回功能（仅自己的消息且2分钟内）
+    if (isSent && !isRecalled) {
+      this.addMessageRecallHandler(messageEl, message);
     }
     
     messagesEl.appendChild(messageEl);
@@ -393,6 +657,227 @@ const Chat = {
         chatId: this.currentChat?.id,
         userId: Auth.getCurrentUserId()
       });
+    }
+  },
+  
+  /**
+   * 添加消息撤回处理器
+   */
+  addMessageRecallHandler(messageEl, message) {
+    let pressTimer;
+    
+    const startPress = (e) => {
+      pressTimer = setTimeout(() => {
+        this.showRecallMenu(messageEl, message);
+      }, 500);
+    };
+    
+    const endPress = () => {
+      clearTimeout(pressTimer);
+    };
+    
+    messageEl.addEventListener('mousedown', startPress);
+    messageEl.addEventListener('mouseup', endPress);
+    messageEl.addEventListener('mouseleave', endPress);
+    messageEl.addEventListener('touchstart', startPress);
+    messageEl.addEventListener('touchend', endPress);
+  },
+  
+  /**
+   * 显示撤回菜单
+   */
+  showRecallMenu(messageEl, message) {
+    // 检查是否在2分钟内
+    const messageTime = new Date(message.createdAt);
+    const now = new Date();
+    const diffMinutes = (now - messageTime) / 1000 / 60;
+    
+    if (diffMinutes > 2) {
+      UI.showToast('消息已超过2分钟，无法撤回');
+      return;
+    }
+    
+    UI.showConfirm('撤回消息', '确定要撤回这条消息吗？', async () => {
+      try {
+        // 通过Socket发送撤回请求
+        window.socket.emit('recall-message', {
+          messageId: message.id,
+          chatId: this.currentChat.id,
+          userId: Auth.getCurrentUserId()
+        });
+        
+        // 本地立即更新UI
+        messageEl.querySelector('.message-content').textContent = '此消息已撤回';
+        messageEl.querySelector('.message-content').classList.add('recalled');
+        messageEl.dataset.recalled = 'true';
+        
+        // 更新本地缓存
+        const msgIndex = this.chatMessages[this.currentChat.id]?.findIndex(m => m.id === message.id);
+        if (msgIndex !== undefined && msgIndex >= 0) {
+          this.chatMessages[this.currentChat.id][msgIndex].isRecalled = true;
+          this.chatMessages[this.currentChat.id][msgIndex].encryptedContent = '[此消息已撤回]';
+        }
+        
+        UI.showToast('消息已撤回');
+      } catch (error) {
+        console.error('撤回失败:', error);
+        UI.showToast('撤回失败');
+      }
+    });
+  },
+  
+  /**
+   * 预览图片
+   */
+  previewImage(src) {
+    const overlay = document.createElement('div');
+    overlay.className = 'image-preview-overlay';
+    overlay.innerHTML = `<img src="${src}" class="image-preview"><button class="btn-icon close-btn">✕</button>`;
+    overlay.querySelector('.close-btn').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+    document.body.appendChild(overlay);
+  },
+  
+  /**
+   * 选择图片
+   */
+  selectImage() {
+    const input = document.getElementById('image-input');
+    if (input) input.click();
+  },
+  
+  /**
+   * 处理选中的图片
+   */
+  async handleImageSelected(file) {
+    if (!file.type.startsWith('image/')) {
+      UI.showToast('请选择图片文件');
+      return;
+    }
+    
+    // 检查文件大小
+    if (file.size > 5 * 1024 * 1024) {
+      UI.showToast('图片大小不能超过5MB');
+      return;
+    }
+    
+    try {
+      const base64 = await this.compressImage(file);
+      await this.sendImageMessage(base64);
+    } catch (error) {
+      console.error('图片处理失败:', error);
+      UI.showToast('图片处理失败');
+    }
+  },
+  
+  /**
+   * 压缩图片并转为base64
+   */
+  compressImage(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // 压缩到800px以内
+          const maxSize = 800;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > maxSize || height > maxSize) {
+            if (width > height) {
+              height = (height / width) * maxSize;
+              width = maxSize;
+            } else {
+              width = (width / height) * maxSize;
+              height = maxSize;
+            }
+          }
+          
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // 质量0.7
+          const base64 = canvas.toDataURL('image/jpeg', 0.7);
+          
+          // 检查base64大小（不超过2MB）
+          const sizeInMB = (base64.length * 0.75) / (1024 * 1024);
+          if (sizeInMB > 2) {
+            // 进一步压缩
+            const newBase64 = canvas.toDataURL('image/jpeg', 0.5);
+            resolve(newBase64);
+          } else {
+            resolve(base64);
+          }
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  },
+  
+  /**
+   * 发送图片消息
+   */
+  async sendImageMessage(base64) {
+    if (!this.currentChat) return;
+    
+    try {
+      const content = JSON.stringify({ type: 'image', content: base64 });
+      
+      const message = {
+        chatId: this.currentChat.id,
+        senderId: Auth.getCurrentUserId(),
+        encryptedContent: content,
+        type: 'image',
+        ttl: null
+      };
+      
+      // 通过Socket发送
+      if (window.socket && window.socket.connected) {
+        window.socket.emit('send-message', message);
+      } else {
+        await fetch(`/api/chats/${message.chatId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(message)
+        });
+      }
+      
+      // 立即在本地显示
+      const localMessage = {
+        id: 'local-' + Date.now(),
+        chatId: message.chatId,
+        senderId: Auth.getCurrentUserId(),
+        galNumber: Auth.currentUser?.galNumber || '',
+        nickname: Auth.currentUser?.nickname || '',
+        encryptedContent: content,
+        type: 'image',
+        isImage: true,
+        ttl: null,
+        createdAt: new Date().toISOString()
+      };
+      
+      if (!this.chatMessages[message.chatId]) {
+        this.chatMessages[message.chatId] = [];
+      }
+      this.chatMessages[message.chatId].push(localMessage);
+      
+      this.displayMessage(localMessage, true);
+      
+      const messagesEl = document.getElementById('chat-messages');
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      
+    } catch (error) {
+      console.error('发送图片失败:', error);
+      UI.showToast('发送图片失败');
     }
   },
   
@@ -412,9 +897,6 @@ const Chat = {
       this.chatMessages[this.currentChat.id] = this.chatMessages[this.currentChat.id]
         .filter(m => m.id !== messageId);
     }
-    
-    // 通知服务器
-    // 注意：这里只通知，不实际删除（服务器端根据TTL自动清理）
   },
   
   /**
@@ -432,23 +914,48 @@ const Chat = {
     const ttl = isDestroy ? parseInt(document.getElementById('destroy-ttl').value) : null;
     
     try {
-      // 直接发送明文（加密功能后续版本开启）
+      // 构造消息内容
       let encryptedContent = content;
+      let isEncrypted = false;
       
-      // 尝试加密（失败不影响发送）
-      if (!isAnonymous && this.currentChat.members) {
+      // 尝试加密（私聊且非匿踪）
+      if (!isAnonymous && this.currentChat.type !== 'group') {
         try {
-          const otherMember = this.currentChat.members.find(m => m.id !== Auth.getCurrentUserId());
-          if (otherMember && otherMember.publicKey) {
-            const recipientKey = JSON.parse(otherMember.publicKey);
-            const encrypted = await NovaCrypto.encryptMessage(content, recipientKey);
-            const senderPublicKey = JSON.stringify(NovaCrypto.publicKeyJwk);
-            encryptedContent = `${encrypted.iv}:${encrypted.ciphertext}:${senderPublicKey}`;
+          const otherMember = this.currentChat.members?.find(m => m.id !== Auth.getCurrentUserId());
+          
+          if (otherMember) {
+            // 获取对方公钥
+            let recipientKey = this.userPublicKeys[otherMember.id];
+            
+            if (!recipientKey && otherMember.publicKey) {
+              try {
+                recipientKey = typeof otherMember.publicKey === 'string'
+                  ? JSON.parse(otherMember.publicKey)
+                  : otherMember.publicKey;
+                this.userPublicKeys[otherMember.id] = recipientKey;
+              } catch (e) {}
+            }
+            
+            if (recipientKey && NovaCrypto && NovaCrypto.privateKey) {
+              // 进行加密
+              const encrypted = await NovaCrypto.encryptMessage(content, recipientKey);
+              const senderPublicKey = JSON.stringify(NovaCrypto.publicKeyJwk);
+              encryptedContent = `${encrypted.iv}:${encrypted.ciphertext}:${senderPublicKey}`;
+              isEncrypted = true;
+            } else {
+              // 无法加密，发送明文
+              encryptedContent = JSON.stringify({ plain: true, content });
+            }
+          } else {
+            encryptedContent = JSON.stringify({ plain: true, content });
           }
         } catch (encErr) {
           console.warn('加密失败，发送明文:', encErr);
-          encryptedContent = content;
+          encryptedContent = JSON.stringify({ plain: true, content });
         }
+      } else if (this.currentChat.type === 'group') {
+        // 群聊不加密
+        encryptedContent = JSON.stringify({ plain: true, content });
       }
       
       // 构造消息
@@ -601,6 +1108,33 @@ const Chat = {
   },
   
   /**
+   * 处理消息撤回
+   */
+  handleMessageRecalled(data) {
+    const { messageId } = data;
+    
+    // 更新UI
+    const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (messageEl) {
+      const contentEl = messageEl.querySelector('.message-content');
+      if (contentEl) {
+        contentEl.textContent = '此消息已撤回';
+        contentEl.classList.add('recalled');
+      }
+      messageEl.dataset.recalled = 'true';
+    }
+    
+    // 更新本地缓存
+    if (this.currentChat && this.chatMessages[this.currentChat.id]) {
+      const msg = this.chatMessages[this.currentChat.id].find(m => m.id === messageId);
+      if (msg) {
+        msg.isRecalled = true;
+        msg.encryptedContent = '[此消息已撤回]';
+      }
+    }
+  },
+  
+  /**
    * 处理消息销毁
    */
   handleMessageDestroyed(messageId) {
@@ -620,6 +1154,10 @@ function registerSocketEvents() {
   
   s.on('new-message', (message) => {
     Chat.handleNewMessage(message);
+  });
+
+  s.on('message-recalled', (data) => {
+    Chat.handleMessageRecalled(data);
   });
 
   s.on('message-destroyed', (data) => {

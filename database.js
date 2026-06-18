@@ -86,6 +86,7 @@ async function initPostgres() {
     type VARCHAR(20) DEFAULT 'normal',
     ttl INTEGER,
     read_by TEXT,
+    is_recalled BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -96,6 +97,16 @@ async function initPostgres() {
     name VARCHAR(50) NOT NULL,
     avatar VARCHAR(50) DEFAULT 'robot',
     system_prompt TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 创建密码重置表
+  await pool.query(`CREATE TABLE IF NOT EXISTS password_resets (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    code VARCHAR(10) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    used BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -196,6 +207,7 @@ async function initSqlite() {
     type TEXT DEFAULT 'normal',
     ttl INTEGER,
     read_by TEXT,
+    is_recalled INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -205,6 +217,15 @@ async function initSqlite() {
     name TEXT NOT NULL,
     avatar TEXT DEFAULT 'robot',
     system_prompt TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS password_resets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    code TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -471,12 +492,64 @@ async function updateUser(userId, data) {
   return result.changes > 0;
 }
 
+// ==================== 密码重置操作 ====================
+
+async function createPasswordReset(email) {
+  // 生成6位验证码
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15分钟后过期
+  
+  // 标记旧的验证码为已使用
+  await runSql('UPDATE password_resets SET used = ? WHERE email = ?', [true, email]);
+  
+  // 创建新验证码
+  if (isProduction) {
+    await runInsert(
+      'INSERT INTO password_resets (email, code, expires_at) VALUES (?, ?, ?)',
+      [email, code, expiresAt]
+    );
+  } else {
+    await runSql(
+      'INSERT INTO password_resets (email, code, expires_at) VALUES (?, ?, ?)',
+      [email, code, expiresAt.toISOString()]
+    );
+  }
+  
+  return { code, expiresAt };
+}
+
+async function verifyPasswordReset(email, code) {
+  const reset = await queryOne(
+    'SELECT * FROM password_resets WHERE email = ? AND code = ? AND used = ? AND expires_at > ?',
+    [email, code, false, new Date().toISOString()]
+  );
+  return reset;
+}
+
+async function resetPassword(email, newPassword) {
+  const bcrypt = require('bcryptjs');
+  const passwordHash = bcrypt.hashSync(newPassword, 10);
+  
+  const result = await runSql('UPDATE users SET password_hash = ? WHERE email = ?', [passwordHash, email]);
+  
+  if (result.changes > 0) {
+    // 标记验证码已使用
+    await runSql('UPDATE password_resets SET used = ? WHERE email = ?', [true, email]);
+    return true;
+  }
+  return false;
+}
+
+async function getUserByEmail(email) {
+  return await queryOne('SELECT id FROM users WHERE email = ?', [email]);
+}
+
 // ==================== 联系人操作 ====================
 
 async function getContacts(userId) {
   // 查询我发出的请求
   const sent = await queryAll(
-    `SELECT u.id, u.gal_number, u.nickname, u.avatar,
+    `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key,
             c.status, c.created_at, 'sent' as direction
      FROM contacts c
      JOIN users u ON c.contact_id = u.id
@@ -487,7 +560,7 @@ async function getContacts(userId) {
   
   // 查询我收到的请求
   const received = await queryAll(
-    `SELECT u.id, u.gal_number, u.nickname, u.avatar,
+    `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key,
             c.status, c.created_at, 'received' as direction
      FROM contacts c
      JOIN users u ON c.user_id = u.id
@@ -579,7 +652,7 @@ async function addChatMember(chatId, userId, role = 'member') {
 
 async function getChatMembers(chatId) {
   return await queryAll(
-    `SELECT u.id, u.gal_number, u.nickname, u.avatar, cm.role
+    `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key, cm.role
      FROM chat_members cm
      JOIN users u ON cm.user_id = u.id
      WHERE cm.chat_id = ?`,
@@ -599,7 +672,7 @@ async function saveMessage(chatId, senderId, encryptedContent, type = 'normal', 
 
 async function getMessages(chatId, limit = 50, offset = 0) {
   return await queryAll(
-    `SELECT m.id, m.chat_id, m.sender_id, m.encrypted_content, m.type, m.ttl, m.read_by, m.created_at,
+    `SELECT m.id, m.chat_id, m.sender_id, m.encrypted_content, m.type, m.ttl, m.read_by, m.is_recalled, m.created_at,
             u.gal_number, u.nickname, u.avatar
      FROM messages m
      LEFT JOIN users u ON m.sender_id = u.id
@@ -613,6 +686,18 @@ async function getMessages(chatId, limit = 50, offset = 0) {
 async function deleteMessage(messageId) {
   const result = await runSql('DELETE FROM messages WHERE id = ?', [messageId]);
   return result.changes > 0;
+}
+
+async function recallMessage(messageId) {
+  const result = await runSql(
+    `UPDATE messages SET encrypted_content = ?, is_recalled = ? WHERE id = ?`,
+    ['[此消息已撤回]', true, messageId]
+  );
+  return result.changes > 0;
+}
+
+async function getMessageById(messageId) {
+  return await queryOne('SELECT * FROM messages WHERE id = ?', [messageId]);
 }
 
 async function markMessageRead(chatId, userId, messageId) {
@@ -658,7 +743,13 @@ module.exports = {
   saveMessage,
   getMessages,
   deleteMessage,
+  recallMessage,
+  getMessageById,
   markMessageRead,
   getAIPersonas,
-  getAIPersona
+  getAIPersona,
+  createPasswordReset,
+  verifyPasswordReset,
+  resetPassword,
+  getUserByEmail
 };

@@ -63,7 +63,10 @@
             <input type="password" id="login-password" placeholder="输入密码" required>
           </div>
           <button type="submit" class="btn btn-primary">登录</button>
-          <p class="auth-switch">还没有账号？<a href="#" id="show-register">立即注册</a></p>
+          <p class="auth-links">
+            <a href="#" id="show-register">还没有账号？立即注册</a>
+            <a href="#" id="forgot-password" class="forgot-link">忘记密码？</a>
+          </p>
         </form>
         
         <!-- 注册表单 -->
@@ -276,6 +279,11 @@
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
             </svg>
           </button>
+          <button class="btn-icon btn-option" id="btn-send-image" title="发送图片">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+            </svg>
+          </button>
         </div>
         <div class="destroy-timer hidden" id="destroy-timer">
           <span>阅后</span>
@@ -287,6 +295,8 @@
           </select>
         </div>
         <input type="text" id="message-input" placeholder="输入消息..." autocomplete="off">
+        <!-- 隐藏的图片输入 -->
+        <input type="file" id="image-input" accept="image/*" style="display:none;">
         <button class="btn-icon btn-send" id="btn-send-message">
           <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
@@ -307,6 +317,11 @@
           <span class="chat-name" id="ai-chat-name">Nova助手</span>
           <span class="chat-status">AI在线</span>
         </div>
+        <button class="btn-icon" id="btn-clear-history" title="清空历史">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+        </button>
       </div>
       <div class="chat-messages" id="ai-chat-messages">
         <!-- AI消息列表 -->

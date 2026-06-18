@@ -67,7 +67,7 @@ async function startServer() {
   });
 
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' })); // 支持大图片
   app.use(express.static(path.join(__dirname, 'public')));
 
   const onlineUsers = new Map();
@@ -118,6 +118,66 @@ async function startServer() {
     }
   });
 
+  // 忘记密码 - 发送验证码
+  app.post('/api/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: '请输入邮箱地址' });
+    }
+    
+    try {
+      // 检查邮箱是否存在
+      const user = await db.getUserByEmail(email);
+      if (!user) {
+        // 为了安全，不告诉用户邮箱是否存在
+        return res.json({ success: true, message: '如果邮箱存在，验证码已发送' });
+      }
+      
+      const reset = await db.createPasswordReset(email);
+      // Demo模式：在响应中返回验证码（生产环境应发送邮件）
+      console.log(`📧 密码重置验证码 [${email}]: ${reset.code}`);
+      
+      res.json({ 
+        success: true, 
+        message: '验证码已发送（Demo模式：验证码会显示在控制台）',
+        demo: true,
+        code: reset.code // Demo模式下返回验证码
+      });
+    } catch (error) {
+      console.error('忘记密码错误:', error);
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+
+  // 重置密码
+  app.post('/api/reset-password', async (req, res) => {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, error: '密码至少6位' });
+    }
+    
+    try {
+      const reset = await db.verifyPasswordReset(email, code);
+      if (!reset) {
+        return res.status(400).json({ success: false, error: '验证码无效或已过期' });
+      }
+      
+      const success = await db.resetPassword(email, newPassword);
+      if (success) {
+        res.json({ success: true, message: '密码重置成功' });
+      } else {
+        res.status(400).json({ success: false, error: '密码重置失败' });
+      }
+    } catch (error) {
+      console.error('重置密码错误:', error);
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+
   app.get('/api/user/:galNumber', async (req, res) => {
     try {
       const user = await db.getUserByGal(req.params.galNumber);
@@ -125,6 +185,7 @@ async function startServer() {
         res.json({
           success: true,
           user: {
+            id: user.id,
             galNumber: user.gal_number,
             nickname: user.nickname,
             avatar: user.avatar,
@@ -160,9 +221,13 @@ async function startServer() {
     }
     try {
       const contacts = (await db.getContacts(userId)).map(c => ({
-        ...c,
+        id: c.id,
         galNumber: c.gal_number,
+        nickname: c.nickname,
+        avatar: c.avatar,
+        publicKey: c.public_key,
         direction: c.direction,
+        status: c.status,
         isOnline: onlineUsers.has(c.id)
       }));
       res.json({ success: true, contacts });
@@ -216,7 +281,8 @@ async function startServer() {
             id: m.id,
             galNumber: m.gal_number,
             nickname: m.nickname,
-            avatar: m.avatar
+            avatar: m.avatar,
+            publicKey: m.public_key
           }))
         });
       }
@@ -258,7 +324,8 @@ async function startServer() {
             id: m.id,
             galNumber: m.gal_number,
             nickname: m.nickname,
-            avatar: m.avatar
+            avatar: m.avatar,
+            publicKey: m.public_key
           }))
         }
       });
@@ -282,6 +349,7 @@ async function startServer() {
         encryptedContent: m.encrypted_content,
         type: m.type,
         ttl: m.ttl,
+        isRecalled: m.is_recalled,
         readBy: m.read_by,
         createdAt: m.created_at
       }));
@@ -299,19 +367,69 @@ async function startServer() {
     }
     try {
       const messageId = await db.saveMessage(chatId, senderId, encryptedContent, type || 'normal', ttl || null);
+      const sender = await db.getUserById(senderId);
       const message = {
         id: messageId,
         chatId,
         senderId,
+        galNumber: sender ? sender.gal_number : 'ANONYMOUS',
+        nickname: sender ? sender.nickname : '匿名',
+        avatar: sender ? sender.avatar : 'anonymous',
         encryptedContent,
         type: type || 'normal',
         ttl: ttl || null,
+        isRecalled: false,
         createdAt: new Date().toISOString()
       };
       // 通过Socket广播给聊天室的其他成员
-      io.to(`chat_${chatId}`).emit('new-message', message);
+      io.to(`chat-${chatId}`).emit('new-message', message);
       res.json({ success: true, message });
     } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+
+  // 消息撤回
+  app.put('/api/chats/:id/messages/:messageId/recall', async (req, res) => {
+    const messageId = parseInt(req.params.messageId);
+    const userId = parseInt(req.body.userId);
+    
+    if (!messageId || !userId) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    
+    try {
+      // 验证消息是否属于该用户且在2分钟内
+      const message = await db.getMessageById(messageId);
+      if (!message) {
+        return res.status(404).json({ success: false, error: '消息不存在' });
+      }
+      
+      if (message.sender_id !== userId) {
+        return res.status(403).json({ success: false, error: '只能撤回自己的消息' });
+      }
+      
+      const messageTime = new Date(message.created_at);
+      const now = new Date();
+      const diffMinutes = (now - messageTime) / 1000 / 60;
+      
+      if (diffMinutes > 2) {
+        return res.status(400).json({ success: false, error: '消息已超过2分钟，无法撤回' });
+      }
+      
+      const success = await db.recallMessage(messageId);
+      if (success) {
+        // 广播撤回事件
+        io.to(`chat-${message.chat_id}`).emit('message-recalled', { 
+          messageId, 
+          chatId: message.chat_id 
+        });
+        res.json({ success: true });
+      } else {
+        res.status(400).json({ success: false, error: '撤回失败' });
+      }
+    } catch (error) {
+      console.error('撤回消息错误:', error);
       res.status(500).json({ success: false, error: '服务器错误' });
     }
   });
@@ -411,7 +529,7 @@ async function startServer() {
     });
   });
 
-  // 诊断接口
+  // ==================== Socket.io 事件 ====================
 
   io.on('connection', (socket) => {
     console.log('🔌 用户连接:', socket.id);
@@ -445,6 +563,7 @@ async function startServer() {
           encryptedContent,
           type: type || 'normal',
           ttl: ttl || null,
+          isRecalled: false,
           createdAt: new Date().toISOString()
         };
         io.to(`chat-${chatId}`).emit('new-message', messageData);
@@ -474,6 +593,25 @@ async function startServer() {
       const { messageId, chatId, userId } = data;
       await db.markMessageRead(chatId, userId, messageId);
       io.to(`chat-${chatId}`).emit('message-read-by', { messageId, userId });
+    });
+    
+    socket.on('recall-message', async (data) => {
+      const { messageId, chatId, userId } = data;
+      try {
+        const message = await db.getMessageById(messageId);
+        if (!message || message.sender_id !== userId) {
+          socket.emit('error', { message: '无法撤回此消息' });
+          return;
+        }
+        
+        const success = await db.recallMessage(messageId);
+        if (success) {
+          io.to(`chat-${chatId}`).emit('message-recalled', { messageId, chatId });
+        }
+      } catch (error) {
+        console.error('撤回消息失败:', error);
+        socket.emit('error', { message: '撤回失败' });
+      }
     });
     
     socket.on('disconnect', () => {

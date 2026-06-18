@@ -1227,3 +1227,149 @@ ul, ol {
 .avatar-heart::before { content: '💖'; }
 .avatar-chart::before { content: '📊'; }
 .avatar-anonymous::before { content: '👻'; }
+
+/* ==================== 忘记密码 ==================== */
+.forgot-link {
+  display: block;
+  margin-top: 12px;
+  color: var(--accent-blue);
+  font-size: 14px;
+  text-align: center;
+}
+
+.auth-links {
+  text-align: center;
+}
+
+.auth-links a {
+  display: block;
+  margin-top: 8px;
+  color: var(--accent-blue);
+  font-size: 14px;
+}
+
+/* ==================== 图片消息 ==================== */
+.chat-image {
+  max-width: 250px;
+  max-height: 250px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  object-fit: cover;
+}
+
+.image-preview-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+  cursor: pointer;
+}
+
+.image-preview {
+  max-width: 95%;
+  max-height: 95%;
+  object-fit: contain;
+}
+
+.image-preview-overlay .close-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: white;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ==================== 加密图标 ==================== */
+.encrypt-icon {
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+/* ==================== 撤回消息 ==================== */
+.message-content.recalled {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ==================== 群聊成员选择 ==================== */
+.group-member-select {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.member-option {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.member-option:hover {
+  background: var(--border-color);
+}
+
+.member-option input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-right: 12px;
+  accent-color: var(--accent-blue);
+}
+
+.member-option label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex: 1;
+}
+
+/* ==================== 消息选项样式 ==================== */
+.btn-option.active {
+  color: var(--accent-pink);
+  background: rgba(255, 51, 102, 0.2);
+}
+
+/* ==================== AI清空历史按钮 ==================== */
+#btn-clear-history {
+  width: 40px;
+  height: 40px;
+}
+
+/* ==================== Modal表单样式增强 ==================== */
+.modal-content input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  accent-color: var(--accent-blue);
+}
+
+/* ==================== 长按提示 ==================== */
+.long-press-hint {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  pointer-events: none;
+}

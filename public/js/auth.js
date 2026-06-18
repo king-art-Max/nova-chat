@@ -60,6 +60,12 @@ const Auth = {
       document.getElementById('auth-error').classList.add('hidden');
     });
     
+    // 忘记密码链接
+    document.getElementById('forgot-password').addEventListener('click', (e) => {
+      e.preventDefault();
+      this.showForgotPasswordModal();
+    });
+    
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       await this.handleLogin();
@@ -69,6 +75,185 @@ const Auth = {
       e.preventDefault();
       await this.handleRegister();
     });
+  },
+  
+  /**
+   * 显示忘记密码模态框
+   */
+  showForgotPasswordModal() {
+    this.showStep1();
+  },
+  
+  /**
+   * 步骤1：输入邮箱
+   */
+  showStep1() {
+    UI.showModal('找回密码', `
+      <div class="forgot-password-content">
+        <p style="color:var(--text-secondary);margin-bottom:16px;">请输入注册时使用的邮箱地址</p>
+        <div class="form-group">
+          <label>邮箱地址</label>
+          <input type="email" id="fp-email" placeholder="your@email.com">
+        </div>
+        <p id="fp-step1-hint" style="color:var(--accent-blue);font-size:12px;margin-top:8px;"></p>
+      </div>
+    `, [
+      { text: '取消', class: 'btn-secondary' },
+      { text: '发送验证码', class: 'btn-primary', closeOnClick: false, onClick: () => this.handleSendCode() }
+    ]);
+    
+    setTimeout(() => document.getElementById('fp-email')?.focus(), 100);
+  },
+  
+  /**
+   * 发送验证码
+   */
+  async handleSendCode() {
+    const email = document.getElementById('fp-email')?.value.trim();
+    const hint = document.getElementById('fp-step1-hint');
+    
+    if (!email) {
+      hint.style.color = '#ff4444';
+      hint.textContent = '请输入邮箱地址';
+      return;
+    }
+    
+    hint.style.color = 'var(--text-muted)';
+    hint.textContent = '正在发送...';
+    
+    try {
+      const response = await fetch('/api/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Demo模式：显示验证码
+        if (data.demo && data.code) {
+          hint.innerHTML = `验证码已发送！<br><span style="color:var(--accent-blue);font-size:18px;font-weight:bold;">${data.code}</span><br><small style="color:var(--text-muted);">(Demo模式：验证码也会显示在服务器控制台)</small>`;
+          this.tempData = { email, code: data.code };
+        } else {
+          hint.innerHTML = `验证码已发送到您的邮箱<br><small style="color:var(--text-muted);">(Demo模式)</small>`;
+          this.tempData = { email };
+        }
+        
+        // 3秒后显示下一步按钮
+        setTimeout(() => {
+          hint.innerHTML += `<br><button class="btn btn-secondary" style="margin-top:12px;" onclick="Auth.showStep2()">下一步</button>`;
+        }, 3000);
+      } else {
+        hint.style.color = '#ff4444';
+        hint.textContent = data.error || '发送失败';
+      }
+    } catch (error) {
+      console.error('发送验证码失败:', error);
+      hint.style.color = '#ff4444';
+      hint.textContent = '网络错误，请重试';
+    }
+  },
+  
+  /**
+   * 步骤2：输入验证码和新密码
+   */
+  showStep2() {
+    if (!this.tempData?.email) {
+      this.showStep1();
+      return;
+    }
+    
+    UI.showModal('重置密码', `
+      <div class="reset-password-content">
+        <p style="color:var(--text-secondary);margin-bottom:16px;">验证码已发送到 ${this.tempData.email}</p>
+        <div class="form-group">
+          <label>验证码</label>
+          <input type="text" id="rp-code" placeholder="6位验证码" maxlength="6" style="text-align:center;font-size:18px;letter-spacing:4px;">
+        </div>
+        <div class="form-group">
+          <label>新密码</label>
+          <input type="password" id="rp-new-password" placeholder="至少6位" minlength="6">
+        </div>
+        <div class="form-group">
+          <label>确认密码</label>
+          <input type="password" id="rp-confirm-password" placeholder="再输一次">
+        </div>
+        <p id="rp-hint" style="color:var(--text-muted);font-size:12px;margin-top:8px;"></p>
+      </div>
+    `, [
+      { text: '取消', class: 'btn-secondary' },
+      { text: '重置密码', class: 'btn-primary', closeOnClick: false, onClick: () => this.handleResetPassword() }
+    ]);
+  },
+  
+  /**
+   * 重置密码
+   */
+  async handleResetPassword() {
+    const code = document.getElementById('rp-code')?.value.trim();
+    const newPassword = document.getElementById('rp-new-password')?.value;
+    const confirmPassword = document.getElementById('rp-confirm-password')?.value;
+    const hint = document.getElementById('rp-hint');
+    
+    if (!code || code.length !== 6) {
+      hint.style.color = '#ff4444';
+      hint.textContent = '请输入6位验证码';
+      return;
+    }
+    
+    if (!newPassword || newPassword.length < 6) {
+      hint.style.color = '#ff4444';
+      hint.textContent = '密码至少6位';
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      hint.style.color = '#ff4444';
+      hint.textContent = '两次密码输入不一致';
+      return;
+    }
+    
+    // Demo模式：检查本地验证码
+    if (this.tempData?.code && code !== this.tempData.code) {
+      hint.style.color = '#ff4444';
+      hint.textContent = '验证码错误';
+      return;
+    }
+    
+    hint.style.color = 'var(--text-muted)';
+    hint.textContent = '正在重置...';
+    
+    try {
+      const response = await fetch('/api/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: this.tempData.email,
+          code,
+          newPassword
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        UI.closeModal();
+        UI.showToast('密码重置成功！请使用新密码登录');
+        this.tempData = null;
+        
+        // 清空登录表单并显示
+        document.getElementById('login-account').value = this.tempData?.email || '';
+        document.getElementById('login-password').value = '';
+      } else {
+        hint.style.color = '#ff4444';
+        hint.textContent = data.error || '重置失败';
+      }
+    } catch (error) {
+      console.error('重置密码失败:', error);
+      hint.style.color = '#ff4444';
+      hint.textContent = '网络错误，请重试';
+    }
   },
   
   async handleLogin() {

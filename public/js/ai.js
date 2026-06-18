@@ -11,11 +11,49 @@ const AIChat = {
    * 初始化AI模块
    */
   async init() {
+    // 加载本地历史
+    this.loadHistoryFromStorage();
+    
     // 加载AI人格列表
     await this.loadPersonas();
     
     // 绑定事件
     this.bindEvents();
+  },
+  
+  /**
+   * 从localStorage加载对话历史
+   */
+  loadHistoryFromStorage() {
+    try {
+      const saved = localStorage.getItem('nova_ai_history');
+      if (saved) {
+        this.conversationHistory = JSON.parse(saved);
+        console.log('✅ AI对话历史已恢复');
+      }
+    } catch (error) {
+      console.error('加载AI历史失败:', error);
+      this.conversationHistory = {};
+    }
+  },
+  
+  /**
+   * 保存对话历史到localStorage
+   */
+  saveHistoryToStorage() {
+    try {
+      // 按 galNumber 保存，每个最多保留50条
+      const toSave = {};
+      for (const gal in this.conversationHistory) {
+        if (this.conversationHistory[gal] && Array.isArray(this.conversationHistory[gal])) {
+          // 只保留最近50条
+          toSave[gal] = this.conversationHistory[gal].slice(-50);
+        }
+      }
+      localStorage.setItem('nova_ai_history', JSON.stringify(toSave));
+    } catch (error) {
+      console.error('保存AI历史失败:', error);
+    }
   },
   
   /**
@@ -41,15 +79,22 @@ const AIChat = {
   renderPersonas() {
     const container = document.getElementById('ai-personas');
     
-    container.innerHTML = this.personas.map(persona => 
-      UI.renderAIPersona(persona)
-    ).join('');
+    container.innerHTML = this.personas.map(persona => {
+      const hasHistory = this.conversationHistory[persona.galNumber]?.length > 0;
+      return `
+        <div class="ai-persona" data-gal="${persona.galNumber}">
+          ${hasHistory ? '<span class="history-badge" title="有对话历史">📜</span>' : ''}
+          <div class="avatar">${UI.avatarMap[persona.avatar] || '🤖'}</div>
+          <div class="name">${UI.escapeHtml(persona.name)}</div>
+          <div class="gal">${UI.formatGalNumber(persona.galNumber)}</div>
+        </div>
+      `;
+    }).join('');
     
     // 绑定点击事件
     container.querySelectorAll('.ai-persona').forEach(card => {
       card.addEventListener('click', (e) => {
         e.stopPropagation();
-        e.preventDefault();
         const gal = card.dataset.gal;
         console.log('AI人格点击, gal:', gal);
         const persona = this.personas.find(p => p.galNumber === gal);
@@ -85,6 +130,11 @@ const AIChat = {
         this.sendMessage();
       }
     });
+    
+    // 清空历史按钮
+    document.getElementById('btn-clear-history')?.addEventListener('click', () => {
+      this.confirmClearHistory();
+    });
   },
   
   /**
@@ -101,7 +151,7 @@ const AIChat = {
     // 显示AI聊天窗口
     UI.showAIChatWindow(persona.name);
     
-    // 添加欢迎消息
+    // 添加欢迎消息（如果没有历史）
     if (this.conversationHistory[persona.galNumber].length === 0) {
       const welcomeMessages = {
         'AI-NOVA000001': '你好！我是Nova助手，有什么我可以帮你的吗？',
@@ -112,6 +162,13 @@ const AIChat = {
       
       const welcome = welcomeMessages[persona.galNumber] || '你好，有什么问题吗？';
       this.addAIMessage(welcome);
+      
+      // 添加到历史
+      this.conversationHistory[persona.galNumber].push({
+        isUser: false,
+        content: welcome
+      });
+      this.saveHistoryToStorage();
     } else {
       // 恢复对话历史
       this.restoreHistory();
@@ -136,6 +193,9 @@ const AIChat = {
         this.addAIMessage(item.content, false);
       }
     }
+    
+    // 滚动到底部
+    container.scrollTop = container.scrollHeight;
   },
   
   /**
@@ -150,7 +210,7 @@ const AIChat = {
       <div class="message-header">
         <span class="message-time">${UI.formatFullTime(new Date())}</span>
       </div>
-      <div class="message-content">${UI.escapeHtml(content)}</div>
+      <div class="message-content">${this.formatContent(content)}</div>
     `;
     
     container.appendChild(messageEl);
@@ -158,6 +218,19 @@ const AIChat = {
     if (scroll) {
       container.scrollTop = container.scrollHeight;
     }
+  },
+  
+  /**
+   * 格式化消息内容
+   */
+  formatContent(content) {
+    // 支持简单的Markdown
+    let formatted = UI.escapeHtml(content);
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    formatted = formatted.replace(/`(.*?)`/g, '<code>$1</code>');
+    formatted = formatted.replace(/\n/g, '<br>');
+    return formatted;
   },
   
   /**
@@ -173,7 +246,7 @@ const AIChat = {
         <span class="message-sender">${this.currentPersona?.name || 'AI'}</span>
         <span class="message-time">${UI.formatFullTime(new Date())}</span>
       </div>
-      <div class="message-content">${UI.escapeHtml(content)}</div>
+      <div class="message-content">${this.formatContent(content)}</div>
     `;
     
     container.appendChild(messageEl);
@@ -203,6 +276,7 @@ const AIChat = {
       isUser: true,
       content
     });
+    this.saveHistoryToStorage();
     
     // 显示正在输入状态
     this.addTypingIndicator();
@@ -232,6 +306,10 @@ const AIChat = {
           isUser: false,
           content: data.reply
         });
+        this.saveHistoryToStorage();
+        
+        // 更新人格卡片显示
+        this.renderPersonas();
         
         // 如果是预设回复，显示提示
         if (data.isFallback) {
@@ -288,16 +366,42 @@ const AIChat = {
   },
   
   /**
+   * 确认清空对话历史
+   */
+  confirmClearHistory() {
+    if (this.currentPersona) {
+      UI.showConfirm('清空对话', '确定要清空与 ' + this.currentPersona.name + ' 的对话历史吗？', () => {
+        this.clearHistory();
+      });
+    }
+  },
+  
+  /**
    * 清空对话历史
    */
   clearHistory() {
     if (this.currentPersona) {
       this.conversationHistory[this.currentPersona.galNumber] = [];
-      UI.showConfirm('清空对话', '确定要清空与 ' + this.currentPersona.name + ' 的对话历史吗？', () => {
-        const container = document.getElementById('ai-chat-messages');
-        container.innerHTML = '';
-        this.addAIMessage('对话历史已清空，有什么想聊的吗？');
-      });
+      this.saveHistoryToStorage();
+      
+      const container = document.getElementById('ai-chat-messages');
+      container.innerHTML = '';
+      
+      // 添加欢迎消息
+      const welcomeMessages = {
+        'AI-NOVA000001': '你好！我是Nova助手，对话历史已清空，有什么我可以帮你的吗？',
+        'AI-TOXIC00002': '呵，对话历史清空了。说吧，这次又想聊什么？',
+        'AI-EMOTI00003': '对话已清空~ 我们重新开始吧，有什么想聊的呢？',
+        'AI-DATA000004': '对话历史已清空。请提供你想要分析的新问题。'
+      };
+      
+      const welcome = welcomeMessages[this.currentPersona.galNumber] || '你好，有什么问题吗？';
+      this.addAIMessage(welcome);
+      
+      // 更新人格卡片
+      this.renderPersonas();
+      
+      UI.showToast('对话历史已清空');
     }
   }
 };
@@ -320,6 +424,22 @@ style.textContent = `
   @keyframes typingBounce {
     0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
     40% { transform: scale(1); opacity: 1; }
+  }
+  .ai-persona .history-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 14px;
+  }
+  .ai-persona {
+    position: relative;
+  }
+  .message-content code {
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9em;
   }
 `;
 document.head.appendChild(style);
