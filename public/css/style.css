@@ -1028,10 +1028,12 @@ ul, ol {
 .chat-input-area {
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
-  padding: var(--space-md);
+  padding: 0;
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+  flex-direction: column;
+  gap: 0;
+  flex-shrink: 0;
+  safe-area-inset-bottom: env(safe-area-inset-bottom);
 }
 
 .message-options {
@@ -1066,9 +1068,14 @@ ul, ol {
 .btn-send {
   width: 44px;
   height: 44px;
+  min-width: 44px;
+  flex-shrink: 0;
   border-radius: var(--radius-full);
   background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
   color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-send:hover {
@@ -2097,18 +2104,22 @@ ul, ol {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px;
+  padding: 8px 12px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
   background: var(--bg-secondary);
+  min-height: 56px;
 }
 
 .input-row #message-input {
   flex: 1;
+  min-width: 0;
   padding: 10px 14px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   color: var(--text-primary);
   font-size: var(--font-md);
+  box-sizing: border-box;
 }
 
 .input-row #message-input:focus {
