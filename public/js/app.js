@@ -436,10 +436,17 @@ const Contacts = {
   showAddContactModal() {
     UI.showInputModal(
       '添加联系人',
-      '对方的Gal号码',
-      'Gal://XXXXXXXXXXXX',
+      '对方的Gal号码（如 GAL90IA56MH2）',
+      'GAL90IA56MH2',
       async (galNumber) => {
-        const cleanGal = galNumber.replace('Gal://', '');
+        let cleanGal = galNumber.trim().replace('Gal://', '').replace('gal://', '');
+        
+        if (!cleanGal.startsWith('GAL')) {
+          UI.showToast('请输入正确的Gal号码，如 GAL90IA56MH2');
+          return;
+        }
+        
+        UI.showToast('正在发送请求...');
         
         try {
           const response = await fetch('/api/contacts/add', {
@@ -454,13 +461,14 @@ const Contacts = {
           const data = await response.json();
           
           if (data.success) {
-            UI.showToast('好友请求已发送');
+            UI.showToast('好友请求已发送 ✨');
             this.loadContacts();
           } else {
             UI.showToast(data.error || '添加失败');
           }
         } catch (error) {
-          UI.showToast('网络错误');
+          console.error('添加联系人失败:', error);
+          UI.showToast('网络错误，请重试');
         }
       }
     );
