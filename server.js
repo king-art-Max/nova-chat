@@ -55,7 +55,6 @@ async function startServer() {
   // 初始化数据库
   await db.initDatabase();
 
-  // 创建Express应用
   const app = express();
   const server = http.createServer(app);
 
@@ -66,17 +65,15 @@ async function startServer() {
     }
   });
 
-  // 中间件
   app.use(cors());
   app.use(express.json());
   app.use(express.static(path.join(__dirname, 'public')));
 
-  // 在线用户映射
   const onlineUsers = new Map();
 
   // ==================== API 路由 ====================
 
-  app.post('/api/register', (req, res) => {
+  app.post('/api/register', async (req, res) => {
     const { nickname, password, publicKey, email } = req.body;
     if (!nickname || !password) {
       return res.status(400).json({ success: false, error: '昵称和密码不能为空' });
@@ -87,165 +84,209 @@ async function startServer() {
     if (!email) {
       return res.status(400).json({ success: false, error: '请填写邮箱，用于找回账号' });
     }
-    const result = db.registerUser(nickname, password, publicKey, email);
-    if (result.success) {
-      const token = uuidv4();
-      res.json({ success: true, user: result.user, token });
-    } else {
-      res.status(400).json(result);
+    try {
+      const result = await db.registerUser(nickname, password, publicKey, email);
+      if (result.success) {
+        const token = uuidv4();
+        res.json({ success: true, user: result.user, token });
+      } else {
+        res.status(400).json(result);
+      }
+    } catch (error) {
+      console.error('注册错误:', error);
+      res.status(500).json({ success: false, error: '服务器错误' });
     }
   });
 
-  app.post('/api/login', (req, res) => {
+  app.post('/api/login', async (req, res) => {
     const { account, password } = req.body;
     if (!account || !password) {
       return res.status(400).json({ success: false, error: '账号和密码不能为空' });
     }
-    const result = db.loginUser(account, password);
-    if (result.success) {
-      const token = uuidv4();
-      res.json({ success: true, user: result.user, token });
-    } else {
-      res.status(401).json(result);
+    try {
+      const result = await db.loginUser(account, password);
+      if (result.success) {
+        const token = uuidv4();
+        res.json({ success: true, user: result.user, token });
+      } else {
+        res.status(401).json(result);
+      }
+    } catch (error) {
+      console.error('登录错误:', error);
+      res.status(500).json({ success: false, error: '服务器错误' });
     }
   });
 
-  app.get('/api/user/:galNumber', (req, res) => {
-    const user = db.getUserByGal(req.params.galNumber);
-    if (user) {
-      res.json({
-        success: true,
-        user: {
-          galNumber: user.gal_number,
-          nickname: user.nickname,
-          avatar: user.avatar,
-          publicKey: user.public_key,
-          isOnline: onlineUsers.has(user.id)
-        }
-      });
-    } else {
-      res.status(404).json({ success: false, error: '用户不存在' });
+  app.get('/api/user/:galNumber', async (req, res) => {
+    try {
+      const user = await db.getUserByGal(req.params.galNumber);
+      if (user) {
+        res.json({
+          success: true,
+          user: {
+            galNumber: user.gal_number,
+            nickname: user.nickname,
+            avatar: user.avatar,
+            publicKey: user.public_key,
+            isOnline: onlineUsers.has(user.id)
+          }
+        });
+      } else {
+        res.status(404).json({ success: false, error: '用户不存在' });
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
     }
   });
 
-  app.put('/api/user', (req, res) => {
+  app.put('/api/user', async (req, res) => {
     const { userId, nickname, avatar, publicKey } = req.body;
     if (!userId) {
       return res.status(400).json({ success: false, error: '缺少用户ID' });
     }
-    const success = db.updateUser(userId, { nickname, avatar, public_key: publicKey });
-    res.json({ success });
+    try {
+      const success = await db.updateUser(userId, { nickname, avatar, public_key: publicKey });
+      res.json({ success });
+    } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
   });
 
-  app.get('/api/contacts', (req, res) => {
+  app.get('/api/contacts', async (req, res) => {
     const userId = parseInt(req.query.userId);
     if (!userId) {
       return res.status(400).json({ success: false, error: '缺少用户ID' });
     }
-    const contacts = db.getContacts(userId).map(c => ({
-      ...c,
-      galNumber: c.gal_number,
-      isOnline: onlineUsers.has(c.id)
-    }));
-    res.json({ success: true, contacts });
+    try {
+      const contacts = (await db.getContacts(userId)).map(c => ({
+        ...c,
+        galNumber: c.gal_number,
+        isOnline: onlineUsers.has(c.id)
+      }));
+      res.json({ success: true, contacts });
+    } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
   });
 
-  app.post('/api/contacts/add', (req, res) => {
+  app.post('/api/contacts/add', async (req, res) => {
     const { userId, contactGal } = req.body;
     if (!userId || !contactGal) {
       return res.status(400).json({ success: false, error: '参数不完整' });
     }
-    const result = db.addContact(userId, contactGal);
-    res.json(result);
+    try {
+      const result = await db.addContact(userId, contactGal);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
   });
 
-  app.post('/api/contacts/accept', (req, res) => {
+  app.post('/api/contacts/accept', async (req, res) => {
     const { userId, contactId } = req.body;
     console.log('接受好友请求:', { userId, contactId });
     if (!userId || !contactId) {
       return res.status(400).json({ success: false, error: '参数不完整' });
     }
-    const success = db.acceptContact(userId, parseInt(contactId));
-    console.log('接受结果:', success);
-    res.json({ success });
+    try {
+      const success = await db.acceptContact(userId, parseInt(contactId));
+      console.log('接受结果:', success);
+      res.json({ success });
+    } catch (error) {
+      console.error('接受请求错误:', error);
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
   });
 
-  app.get('/api/chats', (req, res) => {
+  app.get('/api/chats', async (req, res) => {
     const userId = parseInt(req.query.userId);
     if (!userId) {
       return res.status(400).json({ success: false, error: '缺少用户ID' });
     }
-    const chats = db.getChats(userId);
-    const enrichedChats = chats.map(chat => {
-      const members = db.getChatMembers(chat.id);
-      return {
-        ...chat,
-        members: members.map(m => ({
-          id: m.id,
-          galNumber: m.gal_number,
-          nickname: m.nickname,
-          avatar: m.avatar
-        }))
-      };
-    });
-    res.json({ success: true, chats: enrichedChats });
+    try {
+      const chats = await db.getChats(userId);
+      const enrichedChats = [];
+      for (const chat of chats) {
+        const members = await db.getChatMembers(chat.id);
+        enrichedChats.push({
+          ...chat,
+          members: members.map(m => ({
+            id: m.id,
+            galNumber: m.gal_number,
+            nickname: m.nickname,
+            avatar: m.avatar
+          }))
+        });
+      }
+      res.json({ success: true, chats: enrichedChats });
+    } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
   });
 
-  app.post('/api/chats', (req, res) => {
+  app.post('/api/chats', async (req, res) => {
     const { type, name, userId, memberIds } = req.body;
     if (!type || !userId) {
       return res.status(400).json({ success: false, error: '参数不完整' });
     }
-    let chatId;
-    if (type === 'private' && memberIds && memberIds.length > 0) {
-      chatId = db.createPrivateChat(userId, memberIds[0]);
-    } else if (type === 'group' && name) {
-      chatId = db.createGroupChat(name, userId);
-      if (memberIds && memberIds.length > 0) {
-        for (const memberId of memberIds) {
-          if (memberId !== userId) {
-            db.addChatMember(chatId, memberId);
+    try {
+      let chatId;
+      if (type === 'private' && memberIds && memberIds.length > 0) {
+        chatId = await db.createPrivateChat(userId, memberIds[0]);
+      } else if (type === 'group' && name) {
+        chatId = await db.createGroupChat(name, userId);
+        if (memberIds && memberIds.length > 0) {
+          for (const memberId of memberIds) {
+            if (memberId !== userId) {
+              await db.addChatMember(chatId, memberId);
+            }
           }
         }
+      } else {
+        return res.status(400).json({ success: false, error: '参数不完整' });
       }
-    } else {
-      return res.status(400).json({ success: false, error: '参数不完整' });
+      const members = await db.getChatMembers(chatId);
+      res.json({
+        success: true,
+        chat: {
+          id: chatId,
+          type,
+          name: name || '私聊',
+          members: members.map(m => ({
+            id: m.id,
+            galNumber: m.gal_number,
+            nickname: m.nickname,
+            avatar: m.avatar
+          }))
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
     }
-    const members = db.getChatMembers(chatId);
-    res.json({
-      success: true,
-      chat: {
-        id: chatId,
-        type,
-        name: name || '私聊',
-        members: members.map(m => ({
-          id: m.id,
-          galNumber: m.gal_number,
-          nickname: m.nickname,
-          avatar: m.avatar
-        }))
-      }
-    });
   });
 
-  app.get('/api/chats/:id/messages', (req, res) => {
+  app.get('/api/chats/:id/messages', async (req, res) => {
     const chatId = parseInt(req.params.id);
     const limit = parseInt(req.query.limit) || 50;
     const offset = parseInt(req.query.offset) || 0;
-    const messages = db.getMessages(chatId, limit, offset).map(m => ({
-      id: m.id,
-      chatId: m.chat_id,
-      senderId: m.sender_id,
-      galNumber: m.gal_number,
-      nickname: m.nickname,
-      avatar: m.avatar,
-      encryptedContent: m.encrypted_content,
-      type: m.type,
-      ttl: m.ttl,
-      readBy: m.read_by,
-      createdAt: m.created_at
-    }));
-    res.json({ success: true, messages });
+    try {
+      const messages = (await db.getMessages(chatId, limit, offset)).map(m => ({
+        id: m.id,
+        chatId: m.chat_id,
+        senderId: m.sender_id,
+        galNumber: m.gal_number,
+        nickname: m.nickname,
+        avatar: m.avatar,
+        encryptedContent: m.encrypted_content,
+        type: m.type,
+        ttl: m.ttl,
+        readBy: m.read_by,
+        createdAt: m.created_at
+      }));
+      res.json({ success: true, messages });
+    } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
   });
 
   app.post('/api/ai/chat', async (req, res) => {
@@ -253,65 +294,73 @@ async function startServer() {
     if (!aiGalNumber || !message) {
       return res.status(400).json({ success: false, error: '参数不完整' });
     }
-    const persona = db.getAIPersona(aiGalNumber);
-    if (!persona) {
-      return res.status(404).json({ success: false, error: 'AI人格不存在' });
-    }
-    if (process.env.DEEPSEEK_API_KEY) {
-      try {
-        const response = await fetch('https://api.deepseek.com/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: 'deepseek-chat',
-            messages: [
-              { role: 'system', content: persona.system_prompt },
-              ...(history || []).map(h => ({
-                role: h.isUser ? 'user' : 'assistant',
-                content: h.content
-              })),
-              { role: 'user', content: message }
-            ],
-            stream: false
-          })
-        });
-        const data = await response.json();
-        if (data.choices && data.choices[0]) {
-          return res.json({
-            success: true,
-            reply: data.choices[0].message.content,
-            aiName: persona.name,
-            aiGal: persona.gal_number,
-            aiAvatar: persona.avatar
-          });
-        }
-      } catch (error) {
-        console.error('DeepSeek API错误:', error);
+    try {
+      const persona = await db.getAIPersona(aiGalNumber);
+      if (!persona) {
+        return res.status(404).json({ success: false, error: 'AI人格不存在' });
       }
+      if (process.env.DEEPSEEK_API_KEY) {
+        try {
+          const response = await fetch('https://api.deepseek.com/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+            },
+            body: JSON.stringify({
+              model: 'deepseek-chat',
+              messages: [
+                { role: 'system', content: persona.system_prompt },
+                ...(history || []).map(h => ({
+                  role: h.isUser ? 'user' : 'assistant',
+                  content: h.content
+                })),
+                { role: 'user', content: message }
+              ],
+              stream: false
+            })
+          });
+          const data = await response.json();
+          if (data.choices && data.choices[0]) {
+            return res.json({
+              success: true,
+              reply: data.choices[0].message.content,
+              aiName: persona.name,
+              aiGal: persona.gal_number,
+              aiAvatar: persona.avatar
+            });
+          }
+        } catch (error) {
+          console.error('DeepSeek API错误:', error);
+        }
+      }
+      const reply = getFallbackReply(aiGalNumber);
+      res.json({
+        success: true,
+        reply,
+        aiName: persona.name,
+        aiGal: persona.gal_number,
+        aiAvatar: persona.avatar,
+        isFallback: true
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
     }
-    const reply = getFallbackReply(aiGalNumber);
-    res.json({
-      success: true,
-      reply,
-      aiName: persona.name,
-      aiGal: persona.gal_number,
-      aiAvatar: persona.avatar,
-      isFallback: true
-    });
   });
 
-  app.get('/api/ai/personas', (req, res) => {
-    const personas = db.getAIPersonas().map(p => ({
-      id: p.id,
-      galNumber: p.gal_number,
-      name: p.name,
-      avatar: p.avatar,
-      systemPrompt: p.system_prompt
-    }));
-    res.json({ success: true, personas });
+  app.get('/api/ai/personas', async (req, res) => {
+    try {
+      const personas = (await db.getAIPersonas()).map(p => ({
+        id: p.id,
+        galNumber: p.gal_number,
+        name: p.name,
+        avatar: p.avatar,
+        systemPrompt: p.system_prompt
+      }));
+      res.json({ success: true, personas });
+    } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
   });
 
   app.post('/api/wallet/create', (req, res) => {
@@ -350,8 +399,8 @@ async function startServer() {
     socket.on('send-message', async (data) => {
       const { chatId, senderId, encryptedContent, type, ttl } = data;
       try {
-        const messageId = db.saveMessage(chatId, senderId, encryptedContent, type, ttl);
-        const sender = db.getUserById(senderId);
+        const messageId = await db.saveMessage(chatId, senderId, encryptedContent, type, ttl);
+        const sender = await db.getUserById(senderId);
         const messageData = {
           id: messageId,
           chatId,
@@ -366,8 +415,8 @@ async function startServer() {
         };
         io.to(`chat-${chatId}`).emit('new-message', messageData);
         if (type === 'self-destruct' && ttl) {
-          setTimeout(() => {
-            db.deleteMessage(messageId);
+          setTimeout(async () => {
+            await db.deleteMessage(messageId);
             io.to(`chat-${chatId}`).emit('message-destroyed', { messageId });
           }, ttl * 1000);
         }
@@ -387,9 +436,9 @@ async function startServer() {
       socket.to(`chat-${chatId}`).emit('user-stop-typing', { userId });
     });
     
-    socket.on('message-read', (data) => {
+    socket.on('message-read', async (data) => {
       const { messageId, chatId, userId } = data;
-      db.markMessageRead(chatId, userId, messageId);
+      await db.markMessageRead(chatId, userId, messageId);
       io.to(`chat-${chatId}`).emit('message-read-by', { messageId, userId });
     });
     
@@ -409,8 +458,17 @@ async function startServer() {
     console.log('═══════════════════════════════════════════');
     console.log('🚀 Nova-OS 服务器启动成功！');
     console.log(`🌐 访问地址: http://localhost:${PORT}`);
+    console.log(`💾 数据库模式: ${process.env.DATABASE_URL ? 'PostgreSQL (云端)' : 'SQLite (本地)'}`);
     console.log('═══════════════════════════════════════════');
     
     if (!process.env.DEEPSEEK_API_KEY) {
       console.log('⚠️  提示: 未配置 DeepSeek API Key，AI将使用预设回复');
-      console.log('💡 如需启用真实AI，请设置环境变量 DEEP
+      console.log('💡 如需启用真实AI，请设置环境变量 DEEPSEEK_API_KEY');
+    }
+  });
+}
+
+startServer().catch(err => {
+  console.error('服务器启动失败:', err);
+  process.exit(1);
+});

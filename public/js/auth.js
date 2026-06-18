@@ -228,4 +228,16 @@ const Auth = {
       localStorage.removeItem('nova_token');
       UI.showScreen('auth-screen');
       UI.showToast('已退出登录');
-    }
+    });
+  },
+  
+  getCurrentUserId() {
+    return this.currentUser ? this.currentUser.id : null;
+  },
+  
+  isLoggedIn() {
+    return !!this.currentUser;
+  }
+};
+
+window.Auth = Auth;

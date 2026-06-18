@@ -1,126 +1,225 @@
 /**
  * Nova-OS 数据库模块
- * 使用 sql.js 操作 SQLite 数据库（纯JS实现，无需编译）
+ * 生产环境: PostgreSQL (Neon/云端)
+ * 本地开发: sql.js (SQLite内存数据库)
  */
 
-const initSqlJs = require('sql.js');
-const path = require('path');
-const fs = require('fs');
-const bcrypt = require('bcryptjs');
+const isProduction = !!process.env.DATABASE_URL;
 
-// 数据库路径配置
-const DB_PATH = process.env.NODE_ENV === 'production' 
-  ? '/tmp/nova-os.db' 
-  : path.join(__dirname, 'nova-os.db');
-
-let db;
+let pool;   // PostgreSQL 连接池
+let sqlDb;  // sql.js 内存数据库
 let saveTimeout;
 
-/**
- * 初始化数据库连接和表结构
- */
-async function initDatabase() {
-  const SQL = await initSqlJs();
-  
-  // 尝试加载已有数据库
-  if (fs.existsSync(DB_PATH)) {
-    const buffer = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(buffer);
-  } else {
-    db = new SQL.Database();
-  }
-  
-  // 创建用户表
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      gal_number TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE,
-      nickname TEXT NOT NULL,
-      avatar TEXT DEFAULT 'astronaut',
-      public_key TEXT,
-      password_hash TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  
-  // 创建联系人表
-  db.run(`
-    CREATE TABLE IF NOT EXISTS contacts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      contact_id INTEGER NOT NULL,
-      status TEXT DEFAULT 'pending',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(user_id, contact_id)
-    )
-  `);
-  
-  // 创建聊天表
-  db.run(`
-    CREATE TABLE IF NOT EXISTS chats (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT DEFAULT 'private',
-      name TEXT,
-      avatar TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  
-  // 创建聊天成员表
-  db.run(`
-    CREATE TABLE IF NOT EXISTS chat_members (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      chat_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      role TEXT DEFAULT 'member',
-      joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(chat_id, user_id)
-    )
-  `);
-  
-  // 创建消息表
-  db.run(`
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      chat_id INTEGER NOT NULL,
-      sender_id INTEGER,
-      encrypted_content TEXT,
-      type TEXT DEFAULT 'normal',
-      ttl INTEGER,
-      read_by TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  
-  // 创建AI人格表
-  db.run(`
-    CREATE TABLE IF NOT EXISTS ai_personas (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      gal_number TEXT UNIQUE NOT NULL,
-      name TEXT NOT NULL,
-      avatar TEXT DEFAULT 'robot',
-      system_prompt TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  
-  // 初始化AI人格
-  initAIPersonas();
-  
-  // 保存初始数据库
-  saveDatabase();
-  
-  console.log('✅ 数据库初始化完成');
+// ==================== 通用工具 ====================
+
+// SQL占位符转换: ? → $1, $2, $3...
+function convertPlaceholders(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
 }
 
-/**
- * 保存数据库到文件
- */
-function saveDatabase() {
-  if (!db) return;
+// ==================== PostgreSQL 模式 ====================
+
+async function initPostgres() {
+  const { Pool } = require('pg');
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+
   try {
-    const data = db.export();
+    const client = await pool.connect();
+    console.log('✅ PostgreSQL连接成功');
+    client.release();
+  } catch (err) {
+    console.error('❌ PostgreSQL连接失败:', err.message);
+    throw err;
+  }
+
+  // 创建用户表
+  await pool.query(`CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    gal_number VARCHAR(20) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    nickname VARCHAR(50) NOT NULL,
+    avatar VARCHAR(50) DEFAULT 'astronaut',
+    public_key TEXT,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 创建联系人表
+  await pool.query(`CREATE TABLE IF NOT EXISTS contacts (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    contact_id INTEGER NOT NULL REFERENCES users(id),
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, contact_id)
+  )`);
+
+  // 创建聊天表
+  await pool.query(`CREATE TABLE IF NOT EXISTS chats (
+    id SERIAL PRIMARY KEY,
+    type VARCHAR(20) DEFAULT 'private',
+    name VARCHAR(100),
+    avatar VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 创建聊天成员表
+  await pool.query(`CREATE TABLE IF NOT EXISTS chat_members (
+    id SERIAL PRIMARY KEY,
+    chat_id INTEGER NOT NULL REFERENCES chats(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    role VARCHAR(20) DEFAULT 'member',
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(chat_id, user_id)
+  )`);
+
+  // 创建消息表
+  await pool.query(`CREATE TABLE IF NOT EXISTS messages (
+    id SERIAL PRIMARY KEY,
+    chat_id INTEGER NOT NULL REFERENCES chats(id),
+    sender_id INTEGER REFERENCES users(id),
+    encrypted_content TEXT,
+    type VARCHAR(20) DEFAULT 'normal',
+    ttl INTEGER,
+    read_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 创建AI人格表
+  await pool.query(`CREATE TABLE IF NOT EXISTS ai_personas (
+    id SERIAL PRIMARY KEY,
+    gal_number VARCHAR(20) UNIQUE NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    avatar VARCHAR(50) DEFAULT 'robot',
+    system_prompt TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  await initAIPersonas();
+  console.log('✅ PostgreSQL数据库初始化完成');
+}
+
+// PostgreSQL 查询辅助
+async function pgQueryOne(sql, params = []) {
+  const pgSql = convertPlaceholders(sql);
+  const { rows } = await pool.query(pgSql, params);
+  return rows[0] || null;
+}
+
+async function pgQueryAll(sql, params = []) {
+  const pgSql = convertPlaceholders(sql);
+  const { rows } = await pool.query(pgSql, params);
+  return rows;
+}
+
+async function pgRunSql(sql, params = []) {
+  const pgSql = convertPlaceholders(sql);
+  const result = await pool.query(pgSql, params);
+  return {
+    lastInsertRowid: result.rows[0]?.id || 0,
+    changes: result.rowCount || 0
+  };
+}
+
+async function pgRunReturning(sql, params = []) {
+  const pgSql = convertPlaceholders(sql) + ' RETURNING id';
+  const { rows } = await pool.query(pgSql, params);
+  return {
+    lastInsertRowid: rows[0]?.id || 0,
+    changes: rows.length
+  };
+}
+
+// ==================== sql.js 模式 (本地开发) ====================
+
+async function initSqlite() {
+  const initSqlJs = require('sql.js');
+  const fs = require('fs');
+  const path = require('path');
+
+  const DB_PATH = path.join(__dirname, 'nova-os.db');
+  const SQL = await initSqlJs();
+  
+  if (fs.existsSync(DB_PATH)) {
+    const buffer = fs.readFileSync(DB_PATH);
+    sqlDb = new SQL.Database(buffer);
+  } else {
+    sqlDb = new SQL.Database();
+  }
+
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    gal_number TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE,
+    nickname TEXT NOT NULL,
+    avatar TEXT DEFAULT 'astronaut',
+    public_key TEXT,
+    password_hash TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS contacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    contact_id INTEGER NOT NULL,
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, contact_id)
+  )`);
+
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS chats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT DEFAULT 'private',
+    name TEXT,
+    avatar TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS chat_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    role TEXT DEFAULT 'member',
+    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(chat_id, user_id)
+  )`);
+
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER NOT NULL,
+    sender_id INTEGER,
+    encrypted_content TEXT,
+    type TEXT DEFAULT 'normal',
+    ttl INTEGER,
+    read_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS ai_personas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    gal_number TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    avatar TEXT DEFAULT 'robot',
+    system_prompt TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  await initAIPersonas();
+  saveDatabase();
+  console.log('✅ SQLite数据库初始化完成');
+}
+
+function saveDatabase() {
+  if (!sqlDb) return;
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const DB_PATH = path.join(__dirname, 'nova-os.db');
+    const data = sqlDb.export();
     const buffer = Buffer.from(data);
     fs.writeFileSync(DB_PATH, buffer);
   } catch (err) {
@@ -128,18 +227,79 @@ function saveDatabase() {
   }
 }
 
-/**
- * 延迟保存（避免频繁写入）
- */
 function scheduleSave() {
   if (saveTimeout) clearTimeout(saveTimeout);
   saveTimeout = setTimeout(saveDatabase, 1000);
 }
 
-/**
- * 初始化预设的AI人格
- */
-function initAIPersonas() {
+// sql.js 查询辅助
+function sqliteQueryOne(sql, params) {
+  const stmt = sqlDb.prepare(sql);
+  stmt.bind(params || []);
+  if (stmt.step()) {
+    const row = stmt.getAsObject();
+    stmt.free();
+    return row;
+  }
+  stmt.free();
+  return null;
+}
+
+function sqliteQueryAll(sql, params) {
+  const results = [];
+  const stmt = sqlDb.prepare(sql);
+  stmt.bind(params || []);
+  while (stmt.step()) {
+    results.push(stmt.getAsObject());
+  }
+  stmt.free();
+  return results;
+}
+
+function sqliteRunSql(sql, params) {
+  sqlDb.run(sql, params);
+  scheduleSave();
+  const idResult = sqliteQueryOne('SELECT last_insert_rowid() as id');
+  const chResult = sqliteQueryOne('SELECT changes() as count');
+  return {
+    lastInsertRowid: idResult ? idResult.id : 0,
+    changes: chResult ? chResult.count : 0
+  };
+}
+
+// ==================== 统一接口 ====================
+
+async function queryOne(sql, params = []) {
+  if (isProduction) return await pgQueryOne(sql, params);
+  return sqliteQueryOne(sql, params);
+}
+
+async function queryAll(sql, params = []) {
+  if (isProduction) return await pgQueryAll(sql, params);
+  return sqliteQueryAll(sql, params);
+}
+
+async function runSql(sql, params = []) {
+  if (isProduction) return await pgRunSql(sql, params);
+  return sqliteRunSql(sql, params);
+}
+
+async function runInsert(sql, params = []) {
+  if (isProduction) return await pgRunReturning(sql, params);
+  return sqliteRunSql(sql, params);
+}
+
+// ==================== 初始化 ====================
+
+async function initDatabase() {
+  if (isProduction) {
+    await initPostgres();
+  } else {
+    await initSqlite();
+  }
+}
+
+async function initAIPersonas() {
   const aiPersonas = [
     {
       gal_number: 'AI-NOVA000001',
@@ -166,22 +326,28 @@ function initAIPersonas() {
       system_prompt: '你是数据分析师，专业、严谨，擅长用数据和逻辑分析问题。回答要精确、有条理。'
     }
   ];
-  
+
   for (const persona of aiPersonas) {
     try {
-      db.run(
-        'INSERT OR IGNORE INTO ai_personas (gal_number, name, avatar, system_prompt) VALUES (?, ?, ?, ?)',
-        [persona.gal_number, persona.name, persona.avatar, persona.system_prompt]
-      );
+      if (isProduction) {
+        await pool.query(
+          'INSERT INTO ai_personas (gal_number, name, avatar, system_prompt) VALUES ($1, $2, $3, $4) ON CONFLICT (gal_number) DO NOTHING',
+          [persona.gal_number, persona.name, persona.avatar, persona.system_prompt]
+        );
+      } else {
+        sqlDb.run(
+          'INSERT OR IGNORE INTO ai_personas (gal_number, name, avatar, system_prompt) VALUES (?, ?, ?, ?)',
+          [persona.gal_number, persona.name, persona.avatar, persona.system_prompt]
+        );
+      }
     } catch (e) {
-      // 忽略已存在的记录
+      // 忽略已存在
     }
   }
 }
 
-/**
- * 生成唯一的Gal号码
- */
+// ==================== Gal号码生成 ====================
+
 function generateGalNumber() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let gal;
@@ -194,92 +360,31 @@ function generateGalNumber() {
     }
     gal = result;
     attempts++;
-  } while (isGalExists(gal) && attempts < 100);
+  } while (attempts < 100);
   
   return gal;
 }
 
-/**
- * 检查Gal号码是否已存在
- */
-function isGalExists(galNumber) {
-  const result = queryOne('SELECT COUNT(*) as count FROM users WHERE gal_number = ?', [galNumber]);
-  return result.count > 0;
-}
+// ==================== 用户操作 ====================
 
-/**
- * 查询一条记录
- */
-function queryOne(sql, params) {
-  const stmt = db.prepare(sql);
-  stmt.bind(params || []);
-  if (stmt.step()) {
-    const row = stmt.getAsObject();
-    stmt.free();
-    return row;
-  }
-  stmt.free();
-  return null;
-}
-
-/**
- * 查询多条记录
- */
-function queryAll(sql, params) {
-  const results = [];
-  const stmt = db.prepare(sql);
-  stmt.bind(params || []);
-  while (stmt.step()) {
-    results.push(stmt.getAsObject());
-  }
-  stmt.free();
-  return results;
-}
-
-/**
- * 执行写操作
- */
-function runSql(sql, params) {
-  db.run(sql, params);
-  scheduleSave();
-  return {
-    lastInsertRowid: getlastInsertRowId(),
-    changes: getChanges()
-  };
-}
-
-function getlastInsertRowId() {
-  const result = queryOne('SELECT last_insert_rowid() as id');
-  return result ? result.id : 0;
-}
-
-function getChanges() {
-  const result = queryOne('SELECT changes() as count');
-  return result ? result.count : 0;
-}
-
-/**
- * 注册新用户
- */
-function registerUser(nickname, password, publicKey, email) {
+async function registerUser(nickname, password, publicKey, email) {
   const galNumber = generateGalNumber();
+  const bcrypt = require('bcryptjs');
   const passwordHash = bcrypt.hashSync(password, 10);
-  
-  // 验证邮箱
+
   if (email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return { success: false, error: '邮箱格式不正确' };
     }
-    // 检查邮箱是否已注册
-    const existing = queryOne('SELECT id FROM users WHERE email = ?', [email]);
+    const existing = await queryOne('SELECT id FROM users WHERE email = ?', [email]);
     if (existing) {
       return { success: false, error: '该邮箱已被注册' };
     }
   }
-  
+
   try {
-    const result = runSql(
+    const result = await runInsert(
       'INSERT INTO users (gal_number, email, nickname, public_key, password_hash) VALUES (?, ?, ?, ?, ?)',
       [galNumber, email || null, nickname, publicKey || null, passwordHash]
     );
@@ -297,34 +402,29 @@ function registerUser(nickname, password, publicKey, email) {
   }
 }
 
-/**
- * 用户登录
- */
-function loginUser(account, password) {
-  // account 可以是 Gal号码 或 邮箱
+async function loginUser(account, password) {
+  const bcrypt = require('bcryptjs');
   let user;
   if (account.includes('@')) {
-    // 邮箱登录
-    user = queryOne(
+    user = await queryOne(
       'SELECT id, gal_number, email, nickname, avatar, public_key, password_hash FROM users WHERE email = ?',
       [account]
     );
   } else {
-    // Gal号码登录
-    user = queryOne(
+    user = await queryOne(
       'SELECT id, gal_number, email, nickname, avatar, public_key, password_hash FROM users WHERE gal_number = ?',
       [account]
     );
   }
-  
+
   if (!user) {
     return { success: false, error: '用户不存在' };
   }
-  
+
   if (!bcrypt.compareSync(password, user.password_hash)) {
     return { success: false, error: '密码错误' };
   }
-  
+
   return {
     success: true,
     user: {
@@ -338,53 +438,43 @@ function loginUser(account, password) {
   };
 }
 
-/**
- * 根据Gal号码获取用户信息
- */
-function getUserByGal(galNumber) {
-  return queryOne(
+async function getUserByGal(galNumber) {
+  return await queryOne(
     'SELECT id, gal_number, email, nickname, avatar, public_key FROM users WHERE gal_number = ?',
     [galNumber]
   );
 }
 
-/**
- * 根据ID获取用户信息
- */
-function getUserById(userId) {
-  return queryOne(
+async function getUserById(userId) {
+  return await queryOne(
     'SELECT id, gal_number, email, nickname, avatar, public_key FROM users WHERE id = ?',
     [userId]
   );
 }
 
-/**
- * 更新用户资料
- */
-function updateUser(userId, data) {
+async function updateUser(userId, data) {
   const allowed = ['nickname', 'avatar', 'public_key'];
   const updates = [];
   const values = [];
-  
+
   for (const key of allowed) {
     if (data[key] !== undefined) {
       updates.push(`${key} = ?`);
       values.push(data[key]);
     }
   }
-  
+
   if (updates.length === 0) return false;
-  
+
   values.push(userId);
-  runSql(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
-  return getChanges() > 0;
+  const result = await runSql(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
+  return result.changes > 0;
 }
 
-/**
- * 获取联系人列表
- */
-function getContacts(userId) {
-  return queryAll(
+// ==================== 联系人操作 ====================
+
+async function getContacts(userId) {
+  return await queryAll(
     `SELECT u.id, u.gal_number, u.nickname, u.avatar,
             c.status, c.created_at
      FROM contacts c
@@ -395,45 +485,41 @@ function getContacts(userId) {
   );
 }
 
-/**
- * 发送好友请求
- */
-function addContact(userId, contactGal) {
-  const contact = getUserByGal(contactGal);
+async function addContact(userId, contactGal) {
+  const contact = await getUserByGal(contactGal);
   if (!contact) {
     return { success: false, error: '用户不存在' };
   }
-  
+
   if (contact.id === userId) {
     return { success: false, error: '不能添加自己为好友' };
   }
-  
-  const existing = queryOne(
+
+  const existing = await queryOne(
     'SELECT * FROM contacts WHERE (user_id = ? AND contact_id = ?) OR (user_id = ? AND contact_id = ?)',
     [userId, contact.id, contact.id, userId]
   );
-  
+
   if (existing) {
     return { success: false, error: '已是好友或请求已存在' };
   }
-  
-  runSql('INSERT INTO contacts (user_id, contact_id, status) VALUES (?, ?, \'pending\')', [userId, contact.id]);
+
+  await runSql('INSERT INTO contacts (user_id, contact_id, status) VALUES (?, ?, \'pending\')', [userId, contact.id]);
   return { success: true, contact };
 }
 
-/**
- * 接受好友请求
- */
-function acceptContact(userId, contactId) {
-  runSql('UPDATE contacts SET status = \'accepted\' WHERE user_id = ? AND contact_id = ? AND status = \'pending\'', [contactId, userId]);
-  return getChanges() > 0;
+async function acceptContact(userId, contactId) {
+  const result = await runSql(
+    'UPDATE contacts SET status = \'accepted\' WHERE user_id = ? AND contact_id = ? AND status = \'pending\'',
+    [contactId, userId]
+  );
+  return result.changes > 0;
 }
 
-/**
- * 获取聊天列表
- */
-function getChats(userId) {
-  return queryAll(
+// ==================== 聊天操作 ====================
+
+async function getChats(userId) {
+  return await queryAll(
     `SELECT c.id, c.type, c.name, c.avatar, c.created_at, cm.role
      FROM chats c
      JOIN chat_members cm ON c.id = cm.chat_id
@@ -443,54 +529,42 @@ function getChats(userId) {
   );
 }
 
-/**
- * 创建私聊
- */
-function createPrivateChat(userId1, userId2) {
-  const existing = queryOne(
+async function createPrivateChat(userId1, userId2) {
+  const existing = await queryOne(
     `SELECT c.id FROM chats c
      JOIN chat_members cm1 ON c.id = cm1.chat_id
      JOIN chat_members cm2 ON c.id = cm2.chat_id
      WHERE c.type = 'private' AND cm1.user_id = ? AND cm2.user_id = ?`,
     [userId1, userId2]
   );
-  
+
   if (existing) {
     return existing.id;
   }
-  
-  runSql('INSERT INTO chats (type) VALUES (\'private\')', []);
-  const chatId = getlastInsertRowId();
-  runSql('INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, \'member\')', [chatId, userId1]);
-  runSql('INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, \'member\')', [chatId, userId2]);
-  
+
+  const result = await runInsert('INSERT INTO chats (type) VALUES (\'private\')', []);
+  const chatId = result.lastInsertRowid;
+  await runSql('INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, \'member\')', [chatId, userId1]);
+  await runSql('INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, \'member\')', [chatId, userId2]);
+
   return chatId;
 }
 
-/**
- * 创建群聊
- */
-function createGroupChat(name, creatorId) {
-  runSql('INSERT INTO chats (type, name) VALUES (\'group\', ?)', [name]);
-  const chatId = getlastInsertRowId();
-  runSql('INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, \'admin\')', [chatId, creatorId]);
-  
+async function createGroupChat(name, creatorId) {
+  const result = await runInsert('INSERT INTO chats (type, name) VALUES (\'group\', ?)', [name]);
+  const chatId = result.lastInsertRowid;
+  await runSql('INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, \'admin\')', [chatId, creatorId]);
+
   return chatId;
 }
 
-/**
- * 添加群聊成员
- */
-function addChatMember(chatId, userId, role = 'member') {
-  runSql('INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, ?)', [chatId, userId, role]);
-  return getChanges() > 0;
+async function addChatMember(chatId, userId, role = 'member') {
+  const result = await runSql('INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, ?)', [chatId, userId, role]);
+  return result.changes > 0;
 }
 
-/**
- * 获取聊天成员
- */
-function getChatMembers(chatId) {
-  return queryAll(
+async function getChatMembers(chatId) {
+  return await queryAll(
     `SELECT u.id, u.gal_number, u.nickname, u.avatar, cm.role
      FROM chat_members cm
      JOIN users u ON cm.user_id = u.id
@@ -499,22 +573,18 @@ function getChatMembers(chatId) {
   );
 }
 
-/**
- * 保存消息
- */
-function saveMessage(chatId, senderId, encryptedContent, type = 'normal', ttl = null) {
-  runSql(
+// ==================== 消息操作 ====================
+
+async function saveMessage(chatId, senderId, encryptedContent, type = 'normal', ttl = null) {
+  const result = await runInsert(
     'INSERT INTO messages (chat_id, sender_id, encrypted_content, type, ttl) VALUES (?, ?, ?, ?, ?)',
     [chatId, senderId, encryptedContent, type, ttl]
   );
-  return getlastInsertRowId();
+  return result.lastInsertRowid;
 }
 
-/**
- * 获取聊天消息
- */
-function getMessages(chatId, limit = 50, offset = 0) {
-  return queryAll(
+async function getMessages(chatId, limit = 50, offset = 0) {
+  return await queryAll(
     `SELECT m.id, m.chat_id, m.sender_id, m.encrypted_content, m.type, m.ttl, m.read_by, m.created_at,
             u.gal_number, u.nickname, u.avatar
      FROM messages m
@@ -526,19 +596,55 @@ function getMessages(chatId, limit = 50, offset = 0) {
   );
 }
 
-/**
- * 删除消息（阅后即焚到期）
- */
-function deleteMessage(messageId) {
-  runSql('DELETE FROM messages WHERE id = ?', [messageId]);
-  return getChanges() > 0;
+async function deleteMessage(messageId) {
+  const result = await runSql('DELETE FROM messages WHERE id = ?', [messageId]);
+  return result.changes > 0;
 }
 
-/**
- * 标记消息已读
- */
-function markMessageRead(chatId, userId, messageId) {
-  const message = queryOne('SELECT read_by FROM messages WHERE id = ?', [messageId]);
+async function markMessageRead(chatId, userId, messageId) {
+  const message = await queryOne('SELECT read_by FROM messages WHERE id = ?', [messageId]);
   if (!message) return false;
-  
+
   let readBy = message.read_by ? JSON.parse(message.read_by) : [];
+  const userIdStr = String(userId);
+
+  if (!readBy.includes(userIdStr)) {
+    readBy.push(userIdStr);
+    await runSql('UPDATE messages SET read_by = ? WHERE id = ?', [JSON.stringify(readBy), messageId]);
+  }
+
+  return true;
+}
+
+// ==================== AI人格操作 ====================
+
+async function getAIPersonas() {
+  return await queryAll('SELECT * FROM ai_personas', []);
+}
+
+async function getAIPersona(galNumber) {
+  return await queryOne('SELECT * FROM ai_personas WHERE gal_number = ?', [galNumber]);
+}
+
+module.exports = {
+  initDatabase,
+  registerUser,
+  loginUser,
+  getUserByGal,
+  getUserById,
+  updateUser,
+  getContacts,
+  addContact,
+  acceptContact,
+  getChats,
+  createPrivateChat,
+  createGroupChat,
+  addChatMember,
+  getChatMembers,
+  saveMessage,
+  getMessages,
+  deleteMessage,
+  markMessageRead,
+  getAIPersonas,
+  getAIPersona
+};
