@@ -161,6 +161,7 @@ async function startServer() {
       const contacts = (await db.getContacts(userId)).map(c => ({
         ...c,
         galNumber: c.gal_number,
+        direction: c.direction,
         isOnline: onlineUsers.has(c.id)
       }));
       res.json({ success: true, contacts });

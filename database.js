@@ -474,15 +474,29 @@ async function updateUser(userId, data) {
 // ==================== 联系人操作 ====================
 
 async function getContacts(userId) {
-  return await queryAll(
+  // 查询我发出的请求
+  const sent = await queryAll(
     `SELECT u.id, u.gal_number, u.nickname, u.avatar,
-            c.status, c.created_at
+            c.status, c.created_at, 'sent' as direction
      FROM contacts c
-     JOIN users u ON (c.contact_id = u.id OR c.user_id = u.id)
-     WHERE (c.user_id = ? OR c.contact_id = ?) AND u.id != ?
+     JOIN users u ON c.contact_id = u.id
+     WHERE c.user_id = ?
      ORDER BY c.created_at DESC`,
-    [userId, userId, userId]
+    [userId]
   );
+  
+  // 查询我收到的请求
+  const received = await queryAll(
+    `SELECT u.id, u.gal_number, u.nickname, u.avatar,
+            c.status, c.created_at, 'received' as direction
+     FROM contacts c
+     JOIN users u ON c.user_id = u.id
+     WHERE c.contact_id = ?
+     ORDER BY c.created_at DESC`,
+    [userId]
+  );
+  
+  return [...sent, ...received];
 }
 
 async function addContact(userId, contactGal) {

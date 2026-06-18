@@ -331,7 +331,7 @@ const UI = {
   /**
    * 渲染联系人列表项
    */
-  renderContactItem(contact, isPending = false) {
+  renderContactItem(contact, isPending = false, isSent = false) {
     const isOnline = onlineUsers.has(contact.id);
     
     return `
@@ -344,6 +344,8 @@ const UI = {
         <div class="contact-item-actions">
           ${isPending ? `
             <button class="btn btn-primary btn-accept">接受</button>
+          ` : isSent ? `
+            <span style="color:var(--text-muted);font-size:12px;">等待对方接受</span>
           ` : `
             <button class="btn btn-secondary btn-chat">聊天</button>
           `}

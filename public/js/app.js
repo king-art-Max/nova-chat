@@ -348,6 +348,7 @@ document.head.appendChild(settingsStyle);
 
 // 联系人模块（简化版，集成在主应用中）
 const Contacts = {
+  allContacts: [],
   contacts: [],
   pendingRequests: [],
   
@@ -360,8 +361,9 @@ const Contacts = {
       const data = await response.json();
       
       if (data.success) {
+        this.allContacts = data.contacts;
         this.contacts = data.contacts.filter(c => c.status === 'accepted');
-        this.pendingRequests = data.contacts.filter(c => c.status === 'pending');
+        this.pendingRequests = data.contacts.filter(c => c.status === 'pending' && c.direction === 'received');
         this.renderContacts();
       }
     } catch (error) {
@@ -375,19 +377,31 @@ const Contacts = {
   renderContacts() {
     const container = document.getElementById('contacts-list');
     
+    // 根据direction区分：received+pending=待处理, sent+pending=已发送, accepted=好友
+    const pendingReceived = this.allContacts.filter(c => c.status === 'pending' && c.direction === 'received');
+    const pendingSent = this.allContacts.filter(c => c.status === 'pending' && c.direction === 'sent');
+    const accepted = this.allContacts.filter(c => c.status === 'accepted');
+    
     let html = '';
     
-    // 待处理请求
-    if (this.pendingRequests.length > 0) {
-      html += '<div style="margin-bottom: 16px;"><h3 style="color: var(--text-muted); margin-bottom: 8px;">待处理请求</h3>';
-      html += this.pendingRequests.map(c => UI.renderContactItem(c, true)).join('');
+    // 待处理请求（我收到的）
+    if (pendingReceived.length > 0) {
+      html += '<div style="margin-bottom: 16px;"><h3 style="color: var(--text-muted); margin-bottom: 8px;">📩 好友请求</h3>';
+      html += pendingReceived.map(c => UI.renderContactItem(c, true)).join('');
       html += '</div>';
     }
     
-    // 联系人
-    if (this.contacts.length > 0) {
-      html += '<div><h3 style="color: var(--text-muted); margin-bottom: 8px;">好友列表</h3>';
-      html += this.contacts.map(c => UI.renderContactItem(c, false)).join('');
+    // 已发送请求
+    if (pendingSent.length > 0) {
+      html += '<div style="margin-bottom: 16px;"><h3 style="color: var(--text-muted); margin-bottom: 8px;">📤 已发送</h3>';
+      html += pendingSent.map(c => UI.renderContactItem(c, false, true)).join('');
+      html += '</div>';
+    }
+    
+    // 好友列表
+    if (accepted.length > 0) {
+      html += '<div><h3 style="color: var(--text-muted); margin-bottom: 8px;">👥 好友</h3>';
+      html += accepted.map(c => UI.renderContactItem(c, false)).join('');
       html += '</div>';
     }
     
