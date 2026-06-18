@@ -971,16 +971,16 @@ const Chat = {
   toggleTranslatePanel() {
     const panel = document.getElementById('translate-panel');
     if (!panel) return;
-    const isVisible = panel.classList.contains('visible');
+    const isVisible = !panel.classList.contains('hidden');
     this.closeAllPanels();
-    if (!isVisible) panel.classList.add('visible');
+    if (!isVisible) panel.classList.remove('hidden');
   },
   toggleBurnPanel() {
     const panel = document.getElementById('burn-panel');
     if (!panel) return;
-    const isVisible = panel.classList.contains('visible');
+    const isVisible = !panel.classList.contains('hidden');
     this.closeAllPanels();
-    if (!isVisible) panel.classList.add('visible');
+    if (!isVisible) panel.classList.remove('hidden');
   },
   toggleAnonymousMode() {
     const btn = document.getElementById('btn-anonymous');
@@ -1007,7 +1007,7 @@ const Chat = {
     if (hint) hint.classList.remove('visible');
   },
   closeAllPanels() {
-    document.querySelectorAll('.feature-panel').forEach(p => p.classList.remove('visible'));
+    document.querySelectorAll('.input-panel').forEach(p => { p.classList.remove('visible'); p.classList.add('hidden'); });
   },
   selectTargetLang(lang) {
     this.selectedTargetLang = lang;
@@ -1061,9 +1061,9 @@ const Chat = {
   toggleEmojiPanel() {
     const panel = document.getElementById('emoji-panel');
     if (!panel) return;
-    const isVisible = panel.classList.contains('visible');
+    const isVisible = !panel.classList.contains('hidden');
     this.closeAllPanels();
-    if (!isVisible) panel.classList.add('visible');
+    if (!isVisible) panel.classList.remove('hidden');
   },
   insertEmoji(emoji) {
     const input = document.getElementById('message-input');
@@ -1189,7 +1189,7 @@ const Chat = {
     const panel = document.getElementById('redpacket-panel');
     if (!panel) return;
     this.closeAllPanels();
-    panel.classList.add('visible');
+    panel.classList.remove('hidden');
   },
   async sendRedPacket() {
     const amount = parseFloat(document.getElementById('rp-amount').value);

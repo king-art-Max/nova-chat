@@ -37,6 +37,11 @@ const UI = {
     });
     document.getElementById(`page-${pageId}`).classList.remove('hidden');
     
+    // 切换到联系人页时刷新列表
+    if (pageId === 'contacts' && typeof Contacts !== 'undefined') {
+      Contacts.loadContacts();
+    }
+    
     // 更新导航状态
     document.querySelectorAll('.nav-item').forEach(item => {
       item.classList.remove('active');

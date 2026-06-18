@@ -243,6 +243,16 @@ async function startServer() {
     }
     try {
       const result = await db.addContact(userId, contactGal);
+      if (result.success && result.contact) {
+        // 通知被添加的用户
+        const targetSocketId = onlineUsers.get(result.contact.id);
+        if (targetSocketId) {
+          io.to(targetSocketId).emit('friend-request', {
+            from: userId,
+            galNumber: result.contact.galNumber || contactGal
+          });
+        }
+      }
       res.json(result);
     } catch (error) {
       res.status(500).json({ success: false, error: '服务器错误' });
@@ -258,6 +268,15 @@ async function startServer() {
     try {
       const success = await db.acceptContact(userId, parseInt(contactId));
       console.log('接受结果:', success);
+      if (success) {
+        // 通知请求发起人
+        const targetSocketId = onlineUsers.get(parseInt(contactId));
+        if (targetSocketId) {
+          io.to(targetSocketId).emit('friend-accepted', {
+            from: userId
+          });
+        }
+      }
       res.json({ success });
     } catch (error) {
       console.error('接受请求错误:', error);

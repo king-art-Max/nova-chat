@@ -31,6 +31,20 @@ function initSocket() {
     console.error('Socket连接错误:', error);
   });
   
+  // 好友请求实时通知
+  socket.on('friend-request', (data) => {
+    console.log('收到好友请求:', data);
+    Contacts.loadContacts();
+    UI.showToast('收到新的好友请求 ✨');
+  });
+  
+  // 好友请求被接受通知
+  socket.on('friend-accepted', (data) => {
+    console.log('好友请求已接受:', data);
+    Contacts.loadContacts();
+    UI.showToast('好友请求已接受 🎉');
+  });
+  
   // 导出socket供其他模块使用
   window.socket = socket;
   
@@ -88,6 +102,11 @@ const App = {
     
     // 初始化Socket
     initSocket();
+    
+    // 定时轮询好友请求（每10秒）
+    this.contactPollTimer = setInterval(() => {
+      if (Auth.isLoggedIn()) Contacts.loadContacts();
+    }, 10000);
   },
   
   /**
