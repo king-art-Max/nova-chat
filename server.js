@@ -158,10 +158,12 @@ async function startServer() {
 
   app.post('/api/contacts/accept', (req, res) => {
     const { userId, contactId } = req.body;
+    console.log('接受好友请求:', { userId, contactId });
     if (!userId || !contactId) {
       return res.status(400).json({ success: false, error: '参数不完整' });
     }
     const success = db.acceptContact(userId, parseInt(contactId));
+    console.log('接受结果:', success);
     res.json({ success });
   });
 

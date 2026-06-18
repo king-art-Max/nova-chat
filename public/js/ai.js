@@ -47,11 +47,18 @@ const AIChat = {
     
     // 绑定点击事件
     container.querySelectorAll('.ai-persona').forEach(card => {
-      card.addEventListener('click', () => {
+      card.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
         const gal = card.dataset.gal;
+        console.log('AI人格点击, gal:', gal);
         const persona = this.personas.find(p => p.gal_number === gal);
         if (persona) {
+          console.log('启动AI对话:', persona.name);
           this.startChat(persona);
+        } else {
+          console.warn('未找到AI人格:', gal);
+          UI.showToast('加载失败，请刷新重试');
         }
       });
     });

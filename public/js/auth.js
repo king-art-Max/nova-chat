@@ -3,16 +3,11 @@
  * 处理用户注册、登录、会话管理
  */
 
-// 认证状态
 const Auth = {
   currentUser: null,
   token: null,
   
-  /**
-   * 初始化认证模块
-   */
   init() {
-    // 从localStorage恢复会话
     const savedUser = localStorage.getItem('nova_user');
     const savedToken = localStorage.getItem('nova_token');
     
@@ -20,33 +15,37 @@ const Auth = {
       this.currentUser = JSON.parse(savedUser);
       this.token = savedToken;
       
-      // 恢复加密密钥
-      NovaCrypto.loadPrivateKey(this.currentUser.password || '').then(loaded => {
-        if (loaded) {
-          console.log('✅ 加密密钥已恢复');
-        }
-        
-        // 初始化Socket连接
-        initSocket();
-        
-        // 显示主界面
-        UI.showScreen('main-screen');
-        App.onLoggedIn();
-      });
+      // 尝试恢复加密密钥，即使失败也要继续
+      this.restoreSession();
     } else {
-      // 显示登录界面
       UI.showScreen('auth-screen');
     }
     
-    // 绑定认证表单事件
     this.bindEvents();
   },
   
-  /**
-   * 绑定表单事件
-   */
+  async restoreSession() {
+    try {
+      const password = this.currentUser.password || '';
+      if (password) {
+        await NovaCrypto.loadPrivateKey(password);
+      }
+    } catch (e) {
+      console.warn('加密密钥恢复失败，将继续使用基本功能:', e);
+    }
+    
+    // 不管加密是否恢复成功，都要继续初始化
+    try {
+      initSocket();
+    } catch (e) {
+      console.warn('Socket初始化失败:', e);
+    }
+    
+    UI.showScreen('main-screen');
+    App.onLoggedIn();
+  },
+  
   bindEvents() {
-    // 切换登录/注册表单
     document.getElementById('show-register').addEventListener('click', (e) => {
       e.preventDefault();
       document.getElementById('login-form').classList.add('hidden');
@@ -61,22 +60,17 @@ const Auth = {
       document.getElementById('auth-error').classList.add('hidden');
     });
     
-    // 登录表单提交
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       await this.handleLogin();
     });
     
-    // 注册表单提交
     document.getElementById('register-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       await this.handleRegister();
     });
   },
   
-  /**
-   * 处理登录
-   */
   async handleLogin() {
     const galNumber = document.getElementById('login-gal').value.trim();
     const password = document.getElementById('login-password').value;
@@ -98,44 +92,40 @@ const Auth = {
       const data = await response.json();
       
       if (data.success) {
-        // 保存用户信息
         this.currentUser = {
           id: data.user.id,
           galNumber: data.user.galNumber,
           nickname: data.user.nickname,
           avatar: data.user.avatar || 'astronaut',
-          publicKey: data.user.publicKey
+          publicKey: data.user.publicKey,
+          password: password
         };
         this.token = data.token;
         
         localStorage.setItem('nova_user', JSON.stringify(this.currentUser));
         localStorage.setItem('nova_token', this.token);
         
-        // 尝试加载私钥（如果存在）
-        const keyLoaded = await NovaCrypto.loadPrivateKey(password);
-        
-        if (!keyLoaded) {
-          // 如果没有本地私钥，生成新的
-          const keyPair = await NovaCrypto.generateKeyPair();
-          
-          // 保存私钥
-          NovaCrypto.savePrivateKey(password);
-          
-          // 更新服务器公钥
-          await fetch('/api/user', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: this.currentUser.id,
-              publicKey: JSON.stringify(NovaCrypto.publicKeyJwk)
-            })
-          });
+        try {
+          const keyLoaded = await NovaCrypto.loadPrivateKey(password);
+          if (!keyLoaded) {
+            const keyPair = await NovaCrypto.generateKeyPair();
+            NovaCrypto.savePrivateKey(password);
+            await fetch('/api/user', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId: this.currentUser.id,
+                publicKey: JSON.stringify(NovaCrypto.publicKeyJwk)
+              })
+            });
+          }
+        } catch (e) {
+          console.warn('加密初始化失败，将继续使用基本功能:', e);
         }
         
         errorEl.classList.add('hidden');
         UI.showScreen('main-screen');
         App.onLoggedIn();
-        
         UI.showToast('登录成功');
       } else {
         errorEl.textContent = data.error || '登录失败';
@@ -148,9 +138,6 @@ const Auth = {
     }
   },
   
-  /**
-   * 处理注册
-   */
   async handleRegister() {
     const nickname = document.getElementById('register-nickname').value.trim();
     const password = document.getElementById('register-password').value;
@@ -176,8 +163,14 @@ const Auth = {
     }
     
     try {
-      // 生成加密密钥对
-      const keyPair = await NovaCrypto.generateKeyPair();
+      let publicKeyStr = null;
+      try {
+        const keyPair = await NovaCrypto.generateKeyPair();
+        NovaCrypto.savePrivateKey(password);
+        publicKeyStr = JSON.stringify(NovaCrypto.publicKeyJwk);
+      } catch (e) {
+        console.warn('加密密钥生成失败，将跳过加密功能:', e);
+      }
       
       const response = await fetch('/api/register', {
         method: 'POST',
@@ -185,23 +178,19 @@ const Auth = {
         body: JSON.stringify({
           nickname,
           password,
-          publicKey: JSON.stringify(NovaCrypto.publicKeyJwk)
+          publicKey: publicKeyStr
         })
       });
       
       const data = await response.json();
       
       if (data.success) {
-        // 保存私钥
-        NovaCrypto.savePrivateKey(password);
-        
-        // 保存用户信息
         this.currentUser = {
           id: data.user.id,
           galNumber: data.user.galNumber,
           nickname: data.user.nickname,
           avatar: 'astronaut',
-          password: password // 用于解锁私钥
+          password: password
         };
         this.token = data.token;
         
@@ -211,7 +200,6 @@ const Auth = {
         errorEl.classList.add('hidden');
         UI.showScreen('main-screen');
         App.onLoggedIn();
-        
         UI.showToast(`注册成功！你的Gal号码是 ${data.user.galNumber}`);
       } else {
         errorEl.textContent = data.error || '注册失败';
@@ -224,42 +212,28 @@ const Auth = {
     }
   },
   
-  /**
-   * 退出登录
-   */
   logout() {
     UI.showConfirm('退出登录', '确定要退出登录吗？', () => {
-      // 断开Socket连接
       if (socket) {
         socket.disconnect();
       }
-      
-      // 清除本地数据
       this.currentUser = null;
       this.token = null;
-      NovaCrypto.clearKeys();
+      try { NovaCrypto.clearKeys(); } catch(e) {}
       localStorage.removeItem('nova_user');
       localStorage.removeItem('nova_token');
-      
       UI.showScreen('auth-screen');
       UI.showToast('已退出登录');
     });
   },
   
-  /**
-   * 获取当前用户ID
-   */
   getCurrentUserId() {
-    return this.currentUser?.id;
+    return this.currentUser ? this.currentUser.id : null;
   },
   
-  /**
-   * 检查是否已登录
-   */
   isLoggedIn() {
     return !!this.currentUser;
   }
 };
 
-// 导出认证模块
 window.Auth = Auth;

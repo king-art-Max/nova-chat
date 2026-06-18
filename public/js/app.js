@@ -409,6 +409,9 @@ const Contacts = {
       if (acceptBtn) {
         acceptBtn.addEventListener('click', (e) => {
           e.stopPropagation();
+          e.preventDefault();
+          acceptBtn.textContent = '处理中...';
+          acceptBtn.disabled = true;
           this.acceptRequest(parseInt(item.dataset.contactId));
         });
       }
@@ -467,24 +470,30 @@ const Contacts = {
    * 接受好友请求
    */
   async acceptRequest(contactId) {
+    console.log('接受好友请求, contactId:', contactId, 'userId:', Auth.getCurrentUserId());
+    UI.showToast('正在处理...');
     try {
       const response = await fetch('/api/contacts/accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: Auth.getCurrentUserId(),
-          contactId
+          contactId: contactId
         })
       });
       
       const data = await response.json();
+      console.log('接受请求结果:', data);
       
       if (data.success) {
-        UI.showToast('已添加为好友');
+        UI.showToast('已添加为好友 🎉');
         this.loadContacts();
+      } else {
+        UI.showToast(data.error || '操作失败');
       }
     } catch (error) {
       console.error('接受请求失败:', error);
+      UI.showToast('网络错误，请重试');
     }
   }
 };
