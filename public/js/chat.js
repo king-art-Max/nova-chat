@@ -432,20 +432,22 @@ const Chat = {
     const ttl = isDestroy ? parseInt(document.getElementById('destroy-ttl').value) : null;
     
     try {
+      // 直接发送明文（加密功能后续版本开启）
       let encryptedContent = content;
-      let senderPublicKey = '';
       
-      // 如果不是匿踪消息，尝试加密
-      if (!isAnonymous) {
-        const otherMember = this.currentChat.members?.find(m => m.id !== Auth.getCurrentUserId());
-        
-        if (otherMember && otherMember.publicKey) {
-          const recipientKey = JSON.parse(otherMember.publicKey);
-          const encrypted = await NovaCrypto.encryptMessage(content, recipientKey);
-          
-          // 将发送者公钥附加到密文后面（用于解密）
-          senderPublicKey = JSON.stringify(NovaCrypto.publicKeyJwk);
-          encryptedContent = `${encrypted.iv}:${encrypted.ciphertext}:${senderPublicKey}`;
+      // 尝试加密（失败不影响发送）
+      if (!isAnonymous && this.currentChat.members) {
+        try {
+          const otherMember = this.currentChat.members.find(m => m.id !== Auth.getCurrentUserId());
+          if (otherMember && otherMember.publicKey) {
+            const recipientKey = JSON.parse(otherMember.publicKey);
+            const encrypted = await NovaCrypto.encryptMessage(content, recipientKey);
+            const senderPublicKey = JSON.stringify(NovaCrypto.publicKeyJwk);
+            encryptedContent = `${encrypted.iv}:${encrypted.ciphertext}:${senderPublicKey}`;
+          }
+        } catch (encErr) {
+          console.warn('加密失败，发送明文:', encErr);
+          encryptedContent = content;
         }
       }
       
@@ -460,39 +462,47 @@ const Chat = {
       
       // 通过Socket发送
       if (window.socket && window.socket.connected) {
-        window.window.socket.emit('send-message', message);
+        window.socket.emit('send-message', message);
+      } else {
+        // Socket未连接时用HTTP API
+        console.warn('Socket未连接，使用HTTP发送');
+        try {
+          await fetch(`/api/chats/${message.chatId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(message)
+          });
+        } catch (httpErr) {
+          console.error('HTTP发送失败:', httpErr);
+        }
       }
       
-      // 立即在本地显示消息（不依赖服务器回传）
+      // 立即在本地显示消息
       const localMessage = {
         id: 'local-' + Date.now(),
         chatId: message.chatId,
         senderId: Auth.getCurrentUserId(),
         galNumber: Auth.currentUser?.galNumber || '',
         nickname: Auth.currentUser?.nickname || '',
-        encryptedContent: content,  // 显示原始文本
+        encryptedContent: content,
         type: message.type,
         ttl: message.ttl,
         createdAt: new Date().toISOString()
       };
       this.displayMessage(localMessage, true);
       
-      // 添加到本地缓存
       if (!this.chatMessages[message.chatId]) {
         this.chatMessages[message.chatId] = [];
       }
       this.chatMessages[message.chatId].push(localMessage);
       
-      // 清空输入框
       input.value = '';
       
-      // 重置选项
       if (isDestroy) {
         document.getElementById('btn-destroy').classList.remove('active');
         document.getElementById('destroy-timer').classList.add('hidden');
       }
       
-      // 发送停止输入状态
       this.sendStopTyping();
     } catch (error) {
       console.error('发送消息失败:', error);

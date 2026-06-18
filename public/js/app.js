@@ -51,6 +51,15 @@ const App = {
     console.log('🚀 Nova-OS 初始化中...');
     
     // 初始化认证
+    // 清理旧版本数据（数据库迁移后旧Gal号失效）
+    try {
+      const savedUser = JSON.parse(localStorage.getItem("nova_user") || "{}");
+      if (savedUser.galNumber && (savedUser.galNumber.startsWith("GAL90") || savedUser.galNumber === "GALUBGQG73IS" || savedUser.galNumber === "GAL7J8MY0S8F")) {
+        console.log("检测到旧版本数据，清理中...");
+        localStorage.removeItem("nova_user");
+        localStorage.removeItem("nova_token");
+      }
+    } catch(e) {}
     Auth.init();
     
     // 绑定全局事件

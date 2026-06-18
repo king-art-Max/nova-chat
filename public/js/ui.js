@@ -335,11 +335,11 @@ const UI = {
     const isOnline = onlineUsers.has(contact.id);
     
     return `
-      <div class="contact-item" data-contact-id="${contact.id}" data-gal="${contact.gal_number}">
+      <div class="contact-item" data-contact-id="${contact.id}" data-gal="${contact.galNumber}">
         ${this.getAvatar(contact.avatar || 'astronaut', isOnline)}
         <div class="contact-item-info">
           <div class="contact-item-name">${this.escapeHtml(contact.nickname)}</div>
-          <div class="contact-item-gal">${this.formatGalNumber(contact.gal_number)}</div>
+          <div class="contact-item-gal">${this.formatGalNumber(contact.galNumber)}</div>
         </div>
         <div class="contact-item-actions">
           ${isPending ? `
@@ -359,10 +359,10 @@ const UI = {
    */
   renderAIPersona(persona) {
     return `
-      <div class="ai-persona" data-gal="${persona.gal_number}">
+      <div class="ai-persona" data-gal="${persona.galNumber}">
         <div class="avatar">${this.avatarMap[persona.avatar] || '🤖'}</div>
         <div class="name">${this.escapeHtml(persona.name)}</div>
-        <div class="gal">${this.formatGalNumber(persona.gal_number)}</div>
+        <div class="gal">${this.formatGalNumber(persona.galNumber)}</div>
       </div>
     `;
   },

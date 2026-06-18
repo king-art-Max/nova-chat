@@ -291,6 +291,31 @@ async function startServer() {
     }
   });
 
+  app.post('/api/chats/:id/messages', async (req, res) => {
+    const chatId = parseInt(req.params.id);
+    const { senderId, encryptedContent, type, ttl } = req.body;
+    if (!chatId || !senderId || !encryptedContent) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    try {
+      const messageId = await db.saveMessage(chatId, senderId, encryptedContent, type || 'normal', ttl || null);
+      const message = {
+        id: messageId,
+        chatId,
+        senderId,
+        encryptedContent,
+        type: type || 'normal',
+        ttl: ttl || null,
+        createdAt: new Date().toISOString()
+      };
+      // 通过Socket广播给聊天室的其他成员
+      io.to(`chat_${chatId}`).emit('new-message', message);
+      res.json({ success: true, message });
+    } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+
   app.post('/api/ai/chat', async (req, res) => {
     const { aiGalNumber, message, history } = req.body;
     if (!aiGalNumber || !message) {
@@ -387,41 +412,6 @@ async function startServer() {
   });
 
   // 诊断接口
-  app.get('/api/debug/ai', async (req, res) => {
-    const hasKey = !!process.env.DEEPSEEK_API_KEY;
-    const keyPrefix = hasKey ? process.env.DEEPSEEK_API_KEY.substring(0, 8) + '...' : 'NOT SET';
-    
-    let apiResult = 'not tested';
-    if (hasKey) {
-      try {
-        const response = await fetch('https://api.deepseek.com/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + process.env.DEEPSEEK_API_KEY
-          },
-          body: JSON.stringify({
-            model: 'deepseek-chat',
-            messages: [{ role: 'user', content: 'hi' }],
-            stream: false
-          })
-        });
-        const data = await response.json();
-        apiResult = data.error ? 'ERROR: ' + data.error.message : 'OK: ' + (data.choices?.[0]?.message?.content || '').substring(0, 50);
-      } catch (e) {
-        apiResult = 'FETCH_ERROR: ' + e.message;
-      }
-    }
-    
-    res.json({
-      hasKey,
-      keyPrefix,
-      nodeVersion: process.version,
-      apiResult
-    });
-  });
-
-  // ==================== Socket.io 事件处理 ====================
 
   io.on('connection', (socket) => {
     console.log('🔌 用户连接:', socket.id);
