@@ -77,14 +77,17 @@ async function startServer() {
   // ==================== API 路由 ====================
 
   app.post('/api/register', (req, res) => {
-    const { nickname, password, publicKey } = req.body;
+    const { nickname, password, publicKey, email } = req.body;
     if (!nickname || !password) {
       return res.status(400).json({ success: false, error: '昵称和密码不能为空' });
     }
     if (password.length < 6) {
       return res.status(400).json({ success: false, error: '密码至少6位' });
     }
-    const result = db.registerUser(nickname, password, publicKey);
+    if (!email) {
+      return res.status(400).json({ success: false, error: '请填写邮箱，用于找回账号' });
+    }
+    const result = db.registerUser(nickname, password, publicKey, email);
     if (result.success) {
       const token = uuidv4();
       res.json({ success: true, user: result.user, token });
@@ -94,11 +97,11 @@ async function startServer() {
   });
 
   app.post('/api/login', (req, res) => {
-    const { galNumber, password } = req.body;
-    if (!galNumber || !password) {
-      return res.status(400).json({ success: false, error: 'Gal号码和密码不能为空' });
+    const { account, password } = req.body;
+    if (!account || !password) {
+      return res.status(400).json({ success: false, error: '账号和密码不能为空' });
     }
-    const result = db.loginUser(galNumber, password);
+    const result = db.loginUser(account, password);
     if (result.success) {
       const token = uuidv4();
       res.json({ success: true, user: result.user, token });
@@ -410,12 +413,4 @@ async function startServer() {
     
     if (!process.env.DEEPSEEK_API_KEY) {
       console.log('⚠️  提示: 未配置 DeepSeek API Key，AI将使用预设回复');
-      console.log('💡 如需启用真实AI，请设置环境变量 DEEPSEEK_API_KEY');
-    }
-  });
-}
-
-startServer().catch(err => {
-  console.error('服务器启动失败:', err);
-  process.exit(1);
-});
+      console.log('💡 如需启用真实AI，请设置环境变量 DEEP

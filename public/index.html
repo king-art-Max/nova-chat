@@ -55,8 +55,8 @@
         <form id="login-form" class="auth-form">
           <h2>登录</h2>
           <div class="form-group">
-            <label for="login-gal">Gal号码</label>
-            <input type="text" id="login-gal" placeholder="Gal://XXXXXXXXXXXX" required>
+            <label for="login-account">Gal号码 或 邮箱</label>
+            <input type="text" id="login-account" placeholder="GAL90IA56MH2 或 your@email.com" required>
           </div>
           <div class="form-group">
             <label for="login-password">密码</label>
@@ -72,6 +72,10 @@
           <div class="form-group">
             <label for="register-nickname">昵称</label>
             <input type="text" id="register-nickname" placeholder="给自己起个名字" required>
+          </div>
+          <div class="form-group">
+            <label for="register-email">邮箱 <span style="color:var(--accent-blue);font-size:12px">（用于找回账号）</span></label>
+            <input type="email" id="register-email" placeholder="your@email.com" required>
           </div>
           <div class="form-group">
             <label for="register-password">密码</label>

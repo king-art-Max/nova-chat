@@ -72,11 +72,11 @@ const Auth = {
   },
   
   async handleLogin() {
-    const galNumber = document.getElementById('login-gal').value.trim();
+    const account = document.getElementById('login-account').value.trim();
     const password = document.getElementById('login-password').value;
     const errorEl = document.getElementById('auth-error');
     
-    if (!galNumber || !password) {
+    if (!account || !password) {
       errorEl.textContent = '请填写所有字段';
       errorEl.classList.remove('hidden');
       return;
@@ -86,7 +86,7 @@ const Auth = {
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ galNumber, password })
+        body: JSON.stringify({ account, password })
       });
       
       const data = await response.json();
@@ -98,7 +98,8 @@ const Auth = {
           nickname: data.user.nickname,
           avatar: data.user.avatar || 'astronaut',
           publicKey: data.user.publicKey,
-          password: password
+          password: password,
+          email: data.user.email
         };
         this.token = data.token;
         
@@ -140,11 +141,12 @@ const Auth = {
   
   async handleRegister() {
     const nickname = document.getElementById('register-nickname').value.trim();
+    const email = document.getElementById('register-email').value.trim();
     const password = document.getElementById('register-password').value;
     const confirm = document.getElementById('register-confirm').value;
     const errorEl = document.getElementById('auth-error');
     
-    if (!nickname || !password || !confirm) {
+    if (!nickname || !password || !confirm || !email) {
       errorEl.textContent = '请填写所有字段';
       errorEl.classList.remove('hidden');
       return;
@@ -178,7 +180,8 @@ const Auth = {
         body: JSON.stringify({
           nickname,
           password,
-          publicKey: publicKeyStr
+          publicKey: publicKeyStr,
+          email
         })
       });
       
@@ -190,7 +193,8 @@ const Auth = {
           galNumber: data.user.galNumber,
           nickname: data.user.nickname,
           avatar: 'astronaut',
-          password: password
+          password: password,
+          email: data.user.email || email
         };
         this.token = data.token;
         
@@ -224,16 +228,4 @@ const Auth = {
       localStorage.removeItem('nova_token');
       UI.showScreen('auth-screen');
       UI.showToast('已退出登录');
-    });
-  },
-  
-  getCurrentUserId() {
-    return this.currentUser ? this.currentUser.id : null;
-  },
-  
-  isLoggedIn() {
-    return !!this.currentUser;
-  }
-};
-
-window.Auth = Auth;
+    }

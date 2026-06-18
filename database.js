@@ -35,6 +35,7 @@ async function initDatabase() {
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       gal_number TEXT UNIQUE NOT NULL,
+      email TEXT UNIQUE,
       nickname TEXT NOT NULL,
       avatar TEXT DEFAULT 'astronaut',
       public_key TEXT,
@@ -260,21 +261,35 @@ function getChanges() {
 /**
  * 注册新用户
  */
-function registerUser(nickname, password, publicKey) {
+function registerUser(nickname, password, publicKey, email) {
   const galNumber = generateGalNumber();
   const passwordHash = bcrypt.hashSync(password, 10);
   
+  // 验证邮箱
+  if (email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return { success: false, error: '邮箱格式不正确' };
+    }
+    // 检查邮箱是否已注册
+    const existing = queryOne('SELECT id FROM users WHERE email = ?', [email]);
+    if (existing) {
+      return { success: false, error: '该邮箱已被注册' };
+    }
+  }
+  
   try {
     const result = runSql(
-      'INSERT INTO users (gal_number, nickname, public_key, password_hash) VALUES (?, ?, ?, ?)',
-      [galNumber, nickname, publicKey || null, passwordHash]
+      'INSERT INTO users (gal_number, email, nickname, public_key, password_hash) VALUES (?, ?, ?, ?, ?)',
+      [galNumber, email || null, nickname, publicKey || null, passwordHash]
     );
     return {
       success: true,
       user: {
         id: result.lastInsertRowid,
         galNumber,
-        nickname
+        nickname,
+        email: email || null
       }
     };
   } catch (error) {
@@ -285,11 +300,22 @@ function registerUser(nickname, password, publicKey) {
 /**
  * 用户登录
  */
-function loginUser(galNumber, password) {
-  const user = queryOne(
-    'SELECT id, gal_number, nickname, avatar, public_key, password_hash FROM users WHERE gal_number = ?',
-    [galNumber]
-  );
+function loginUser(account, password) {
+  // account 可以是 Gal号码 或 邮箱
+  let user;
+  if (account.includes('@')) {
+    // 邮箱登录
+    user = queryOne(
+      'SELECT id, gal_number, email, nickname, avatar, public_key, password_hash FROM users WHERE email = ?',
+      [account]
+    );
+  } else {
+    // Gal号码登录
+    user = queryOne(
+      'SELECT id, gal_number, email, nickname, avatar, public_key, password_hash FROM users WHERE gal_number = ?',
+      [account]
+    );
+  }
   
   if (!user) {
     return { success: false, error: '用户不存在' };
@@ -306,7 +332,8 @@ function loginUser(galNumber, password) {
       galNumber: user.gal_number,
       nickname: user.nickname,
       avatar: user.avatar,
-      publicKey: user.public_key
+      publicKey: user.public_key,
+      email: user.email
     }
   };
 }
@@ -316,7 +343,7 @@ function loginUser(galNumber, password) {
  */
 function getUserByGal(galNumber) {
   return queryOne(
-    'SELECT id, gal_number, nickname, avatar, public_key FROM users WHERE gal_number = ?',
+    'SELECT id, gal_number, email, nickname, avatar, public_key FROM users WHERE gal_number = ?',
     [galNumber]
   );
 }
@@ -326,7 +353,7 @@ function getUserByGal(galNumber) {
  */
 function getUserById(userId) {
   return queryOne(
-    'SELECT id, gal_number, nickname, avatar, public_key FROM users WHERE id = ?',
+    'SELECT id, gal_number, email, nickname, avatar, public_key FROM users WHERE id = ?',
     [userId]
   );
 }
@@ -515,49 +542,3 @@ function markMessageRead(chatId, userId, messageId) {
   if (!message) return false;
   
   let readBy = message.read_by ? JSON.parse(message.read_by) : [];
-  const userIdStr = String(userId);
-  
-  if (!readBy.includes(userIdStr)) {
-    readBy.push(userIdStr);
-    runSql('UPDATE messages SET read_by = ? WHERE id = ?', [JSON.stringify(readBy), messageId]);
-  }
-  
-  return true;
-}
-
-/**
- * 获取AI人格列表
- */
-function getAIPersonas() {
-  return queryAll('SELECT * FROM ai_personas', []);
-}
-
-/**
- * 获取特定AI人格
- */
-function getAIPersona(galNumber) {
-  return queryOne('SELECT * FROM ai_personas WHERE gal_number = ?', [galNumber]);
-}
-
-module.exports = {
-  initDatabase,
-  registerUser,
-  loginUser,
-  getUserByGal,
-  getUserById,
-  updateUser,
-  getContacts,
-  addContact,
-  acceptContact,
-  getChats,
-  createPrivateChat,
-  createGroupChat,
-  addChatMember,
-  getChatMembers,
-  saveMessage,
-  getMessages,
-  deleteMessage,
-  markMessageRead,
-  getAIPersonas,
-  getAIPersona
-};
