@@ -152,7 +152,7 @@ function initAIPersonas() {
 
 /**
  * 生成唯一的Gal号码
- * 格式: GAL + 9位大写字母数字 + 1位校验位
+ * 格式: Gal:// + 10位大写字母数字
  */
 function generateGalNumber() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -176,13 +176,14 @@ function generateGalNumber() {
  * 计算校验位
  */
 function calculateCheckDigit(base) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let sum = 0;
   for (let i = 0; i < base.length; i++) {
     sum += base.charCodeAt(i);
   }
   return chars[(sum % 36)];
 }
+
+const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
 /**
  * 检查Gal号码是否已存在
@@ -358,7 +359,7 @@ function getChats(userId) {
   const stmt = db.prepare(`
     SELECT c.*, cm.role,
            (SELECT m.encrypted_content FROM messages m WHERE m.chat_id = c.id ORDER BY m.id DESC LIMIT 1) as last_message,
-           (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id AND m.read_by NOT LIKE '%"' || ? || '"%') as unread_count
+           (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id AND m.read_by NOT LIKE '%"' + ? + '"%') as unread_count
     FROM chats c
     JOIN chat_members cm ON c.id = cm.chat_id
     WHERE cm.user_id = ?

@@ -139,6 +139,7 @@
         <!-- AI页面 -->
         <div class="page hidden" id="page-ai">
           <div class="ai-personas" id="ai-personas">
+            <!-- AI人格卡片由JS动态生成 -->
           </div>
         </div>
 
@@ -253,8 +254,12 @@
           </button>
         </div>
       </div>
-      <div class="chat-messages" id="chat-messages"></div>
-      <div class="chat-typing" id="chat-typing"></div>
+      <div class="chat-messages" id="chat-messages">
+        <!-- 消息列表 -->
+      </div>
+      <div class="chat-typing" id="chat-typing">
+        <!-- 正在输入提示 -->
+      </div>
       <div class="chat-input-area">
         <div class="message-options">
           <button class="btn-icon btn-option" id="btn-destroy" title="阅后即焚">
@@ -299,7 +304,9 @@
           <span class="chat-status">AI在线</span>
         </div>
       </div>
-      <div class="chat-messages" id="ai-chat-messages"></div>
+      <div class="chat-messages" id="ai-chat-messages">
+        <!-- AI消息列表 -->
+      </div>
       <div class="chat-input-area">
         <input type="text" id="ai-message-input" placeholder="和AI聊聊..." autocomplete="off">
         <button class="btn-icon btn-send" id="btn-send-ai-message">
@@ -322,8 +329,12 @@
           </svg>
         </button>
       </div>
-      <div class="modal-body" id="modal-body"></div>
-      <div class="modal-footer" id="modal-footer"></div>
+      <div class="modal-body" id="modal-body">
+        <!-- 模态框内容 -->
+      </div>
+      <div class="modal-footer" id="modal-footer">
+        <!-- 模态框按钮 -->
+      </div>
     </div>
   </div>
 

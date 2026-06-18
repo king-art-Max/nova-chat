@@ -1,0 +1,397 @@
+/**
+ * Nova-OS UI工具模块
+ * 提供界面操作、模态框、Toast等通用功能
+ */
+
+const UI = {
+  // 头像emoji映射
+  avatarMap: {
+    astronaut: '👨‍🚀',
+    rocket: '🚀',
+    star: '⭐',
+    moon: '🌙',
+    alien: '👽',
+    robot: '🤖',
+    devil: '😈',
+    heart: '💖',
+    chart: '📊',
+    anonymous: '👻'
+  },
+  
+  /**
+   * 显示/隐藏屏幕
+   */
+  showScreen(screenId) {
+    document.querySelectorAll('.screen').forEach(screen => {
+      screen.classList.remove('active');
+    });
+    document.getElementById(screenId).classList.add('active');
+  },
+  
+  /**
+   * 显示/隐藏页面
+   */
+  showPage(pageId) {
+    document.querySelectorAll('.page').forEach(page => {
+      page.classList.add('hidden');
+    });
+    document.getElementById(`page-${pageId}`).classList.remove('hidden');
+    
+    // 更新导航状态
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.classList.remove('active');
+    });
+    document.querySelector(`.nav-item[data-page="${pageId}"]`)?.classList.add('active');
+    
+    // 更新页面标题
+    const titles = {
+      chats: '消息',
+      contacts: '联系人',
+      ai: 'AI助手',
+      wallet: '钱包',
+      profile: '我的'
+    };
+    document.getElementById('page-title').textContent = titles[pageId] || 'Nova-OS';
+  },
+  
+  /**
+   * 获取头像HTML
+   */
+  getAvatar(avatarType, isOnline = false) {
+    const emoji = this.avatarMap[avatarType] || '👤';
+    return `<div class="avatar ${isOnline ? 'online' : ''}">${emoji}</div>`;
+  },
+  
+  /**
+   * 格式化时间戳
+   */
+  formatTime(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now - date;
+    
+    // 今天的消息显示时间
+    if (date.toDateString() === now.toDateString()) {
+      return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    // 昨天的消息
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+      return '昨天';
+    }
+    
+    // 一周内的消息
+    if (diff < 7 * 24 * 60 * 60 * 1000) {
+      const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+      return weekdays[date.getDay()];
+    }
+    
+    // 更早的消息显示日期
+    return `${date.getMonth() + 1}/${date.getDate()}`;
+  },
+  
+  /**
+   * 格式化完整时间
+   */
+  formatFullTime(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleString('zh-CN', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  },
+  
+  /**
+   * 显示Toast通知
+   */
+  showToast(message, duration = 3000) {
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toast-message');
+    
+    toastMessage.textContent = message;
+    toast.classList.remove('hidden');
+    
+    setTimeout(() => {
+      toast.classList.add('hidden');
+    }, duration);
+  },
+  
+  /**
+   * 显示模态框
+   */
+  showModal(title, bodyContent, buttons = []) {
+    const modal = document.getElementById('modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalBody = document.getElementById('modal-body');
+    const modalFooter = document.getElementById('modal-footer');
+    
+    modalTitle.textContent = title;
+    modalBody.innerHTML = bodyContent;
+    modalFooter.innerHTML = '';
+    
+    buttons.forEach(btn => {
+      const button = document.createElement('button');
+      button.className = `btn ${btn.class || 'btn-secondary'}`;
+      button.textContent = btn.text;
+      button.onclick = () => {
+        if (btn.onClick) btn.onClick();
+        if (btn.closeOnClick !== false) this.closeModal();
+      };
+      modalFooter.appendChild(button);
+    });
+    
+    modal.classList.remove('hidden');
+    
+    // 点击背景关闭
+    modal.onclick = (e) => {
+      if (e.target === modal) this.closeModal();
+    };
+  },
+  
+  /**
+   * 关闭模态框
+   */
+  closeModal() {
+    document.getElementById('modal').classList.add('hidden');
+  },
+  
+  /**
+   * 创建输入模态框
+   */
+  showInputModal(title, label, placeholder, onConfirm) {
+    this.showModal(title, `
+      <div class="form-group">
+        <label>${label}</label>
+        <input type="text" id="modal-input" placeholder="${placeholder}">
+      </div>
+    `, [
+      { text: '取消', class: 'btn-secondary' },
+      { text: '确定', class: 'btn-primary', onClick: () => {
+        const value = document.getElementById('modal-input').value.trim();
+        if (value) onConfirm(value);
+      }}
+    ]);
+    
+    // 自动聚焦输入框
+    setTimeout(() => {
+      document.getElementById('modal-input').focus();
+    }, 100);
+  },
+  
+  /**
+   * 创建确认模态框
+   */
+  showConfirm(title, message, onConfirm) {
+    this.showModal(title, `<p>${message}</p>`, [
+      { text: '取消', class: 'btn-secondary' },
+      { text: '确定', class: 'btn-primary', onClick: onConfirm }
+    ]);
+  },
+  
+  /**
+   * 显示聊天窗口
+   */
+  showChatWindow() {
+    document.getElementById('chat-window').classList.remove('hidden');
+    document.getElementById('main-screen').classList.add('hidden');
+  },
+  
+  /**
+   * 隐藏聊天窗口
+   */
+  hideChatWindow() {
+    document.getElementById('chat-window').classList.add('hidden');
+    document.getElementById('main-screen').classList.remove('hidden');
+  },
+  
+  /**
+   * 显示AI聊天窗口
+   */
+  showAIChatWindow(aiName) {
+    document.getElementById('ai-chat-name').textContent = aiName;
+    document.getElementById('ai-chat-messages').innerHTML = '';
+    document.getElementById('ai-chat-window').classList.remove('hidden');
+    document.getElementById('main-screen').classList.add('hidden');
+  },
+  
+  /**
+   * 隐藏AI聊天窗口
+   */
+  hideAIChatWindow() {
+    document.getElementById('ai-chat-window').classList.add('hidden');
+    document.getElementById('main-screen').classList.remove('hidden');
+  },
+  
+  /**
+   * 添加消息到聊天窗口
+   */
+  appendMessage(containerId, message, isSent = false) {
+    const container = document.getElementById(containerId);
+    const messageEl = document.createElement('div');
+    messageEl.className = `message ${isSent ? 'sent' : 'received'} ${message.type || ''}`;
+    
+    const statusIcon = this.getMessageStatusIcon(message.status);
+    
+    messageEl.innerHTML = `
+      ${!isSent ? `
+        <div class="message-header">
+          <span class="message-sender">${message.nickname || '匿名'}</span>
+          <span class="message-time">${this.formatFullTime(message.createdAt)}</span>
+        </div>
+      ` : `
+        <div class="message-header">
+          <span class="message-time">${this.formatFullTime(message.createdAt)}</span>
+        </div>
+      `}
+      <div class="message-content">${this.escapeHtml(message.content)}</div>
+      ${isSent ? `<div class="message-status ${message.status === 'read' ? 'read' : ''}">${statusIcon}</div>` : ''}
+      ${message.ttl ? `<div class="destroy-progress" style="animation-duration: ${message.ttl}s"></div>` : ''}
+    `;
+    
+    container.appendChild(messageEl);
+    container.scrollTop = container.scrollHeight;
+    
+    return messageEl;
+  },
+  
+  /**
+   * 获取消息状态图标
+   */
+  getMessageStatusIcon(status) {
+    switch (status) {
+      case 'sent': return '✓';
+      case 'delivered': return '✓✓';
+      case 'read': return '✓✓';
+      default: return '';
+    }
+  },
+  
+  /**
+   * HTML转义
+   */
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  },
+  
+  /**
+   * 格式化Gal号码显示
+   */
+  formatGalNumber(gal) {
+    if (!gal) return '';
+    if (gal.startsWith('Gal://')) {
+      return gal;
+    }
+    return `Gal://${gal}`;
+  },
+  
+  /**
+   * 显示加载状态
+   */
+  setLoading(element, loading) {
+    if (loading) {
+      element.disabled = true;
+      element.dataset.originalText = element.textContent;
+      element.textContent = '加载中...';
+    } else {
+      element.disabled = false;
+      element.textContent = element.dataset.originalText || element.textContent;
+    }
+  },
+  
+  /**
+   * 渲染聊天列表项
+   */
+  renderChatItem(chat, currentUserId) {
+    const otherMember = chat.members?.find(m => m.id !== currentUserId);
+    const name = chat.type === 'group' ? chat.name : (otherMember?.nickname || '未知用户');
+    const avatar = otherMember?.avatar || (chat.type === 'group' ? 'star' : 'astronaut');
+    const isOnline = otherMember && onlineUsers.has(otherMember.id);
+    
+    return `
+      <div class="chat-item" data-chat-id="${chat.id}">
+        ${this.getAvatar(avatar, isOnline)}
+        <div class="chat-item-info">
+          <div class="chat-item-name">${this.escapeHtml(name)}</div>
+          <div class="chat-item-preview">${chat.type === 'group' ? '群聊' : '点击开始聊天'}</div>
+        </div>
+        <div class="chat-item-meta">
+          <span class="chat-item-time">${chat.updated_at ? this.formatTime(chat.updated_at) : ''}</span>
+          ${chat.unread_count > 0 ? `<span class="chat-item-badge">${chat.unread_count}</span>` : ''}
+        </div>
+      </div>
+    `;
+  },
+  
+  /**
+   * 渲染联系人列表项
+   */
+  renderContactItem(contact, isPending = false) {
+    const isOnline = onlineUsers.has(contact.id);
+    
+    return `
+      <div class="contact-item" data-contact-id="${contact.id}" data-gal="${contact.gal_number}">
+        ${this.getAvatar(contact.avatar || 'astronaut', isOnline)}
+        <div class="contact-item-info">
+          <div class="contact-item-name">${this.escapeHtml(contact.nickname)}</div>
+          <div class="contact-item-gal">${this.formatGalNumber(contact.gal_number)}</div>
+        </div>
+        <div class="contact-item-actions">
+          ${isPending ? `
+            <button class="btn btn-primary btn-accept">接受</button>
+          ` : `
+            <button class="btn btn-secondary btn-chat">聊天</button>
+          `}
+        </div>
+      </div>
+    `;
+  },
+  
+  /**
+   * 渲染AI人格卡片
+   */
+  renderAIPersona(persona) {
+    return `
+      <div class="ai-persona" data-gal="${persona.gal_number}">
+        <div class="avatar">${this.avatarMap[persona.avatar] || '🤖'}</div>
+        <div class="name">${this.escapeHtml(persona.name)}</div>
+        <div class="gal">${this.formatGalNumber(persona.gal_number)}</div>
+      </div>
+    `;
+  },
+  
+  /**
+   * 生成钱包地址（前端模拟）
+   */
+  generateWalletAddress() {
+    const chars = '0123456789abcdef';
+    let address = '0x';
+    for (let i = 0; i < 40; i++) {
+      address += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return address;
+  }
+};
+
+// 全局保存在线用户状态
+let onlineUsers = new Set();
+
+// 监听用户状态变化
+if (typeof socket !== 'undefined') {
+  socket.on('user-status', (data) => {
+    if (data.status === 'online') {
+      onlineUsers.add(data.userId);
+    } else {
+      onlineUsers.delete(data.userId);
+    }
+  });
+}
+
+// 导出UI模块
+window.UI = UI;
+window.onlineUsers = onlineUsers;
