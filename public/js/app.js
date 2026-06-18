@@ -113,14 +113,66 @@ const App = {
     });
     
     // 退出登录
-    document.getElementById('btn-logout').addEventListener('click', () => {
-      Auth.logout();
-    });
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', () => {
+        Auth.logout();
+      });
+    }
     
     // 编辑资料
-    document.getElementById('btn-edit-profile').addEventListener('click', () => {
-      this.showEditProfile();
+    const editProfileBtn = document.getElementById('btn-edit-profile');
+    if (editProfileBtn) {
+      editProfileBtn.addEventListener('click', () => {
+        this.showEditProfile();
+      });
+    }
+    
+    // 安全设置导航
+    const menuSecurity = document.getElementById('menu-security');
+    if (menuSecurity) {
+      menuSecurity.addEventListener('click', () => {
+        UI.showSecurityPage();
+      });
+    }
+    
+    // 安全设置返回按钮
+    const securityBack = document.getElementById('btn-security-back');
+    if (securityBack) {
+      securityBack.addEventListener('click', () => {
+        UI.backToProfile();
+      });
+    }
+    
+    // 安全设置卡片展开/折叠
+    document.querySelectorAll('.security-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.toggle-switch')) return;
+        const detail = card.querySelector('.sc-detail');
+        if (detail) {
+          detail.classList.toggle('hidden');
+        }
+      });
     });
+    
+    // 安全设置开关状态保存
+    document.querySelectorAll('.sc-toggle input').forEach(toggle => {
+      toggle.addEventListener('change', (e) => {
+        const card = e.target.closest('.security-card');
+        const module = card?.dataset.module;
+        if (module) {
+          localStorage.setItem(`security_${module}`, e.target.checked);
+        }
+      });
+    });
+    
+    // 联系人搜索
+    const contactSearch = document.getElementById('contact-search');
+    if (contactSearch) {
+      contactSearch.addEventListener('input', (e) => {
+        Contacts.filterContacts(e.target.value);
+      });
+    }
     
     // 模态框关闭按钮
     document.getElementById('btn-modal-close').addEventListener('click', () => {
@@ -379,10 +431,62 @@ const Contacts = {
         this.contacts = data.contacts.filter(c => c.status === 'accepted');
         this.pendingRequests = data.contacts.filter(c => c.status === 'pending' && c.direction === 'received');
         this.renderContacts();
+        this.renderFriendRequests();
       }
     } catch (error) {
       console.error('加载联系人失败:', error);
     }
+  },
+  
+  renderFriendRequests() {
+    const container = document.getElementById('friend-requests');
+    const frList = document.getElementById('fr-list');
+    const frCount = document.getElementById('fr-count');
+    
+    if (!container || !frList) return;
+    
+    const pending = this.allContacts.filter(c => c.status === 'pending' && c.direction === 'received');
+    
+    if (pending.length > 0) {
+      container.classList.remove('hidden');
+      if (frCount) frCount.textContent = pending.length;
+      frList.innerHTML = pending.map(c => `
+        <div class="fr-item" data-contact-id="${c.id}">
+          <div class="fr-avatar">${UI.avatarMap[c.avatar] || '👤'}</div>
+          <div class="fr-info">
+            <div class="fr-name">${UI.escapeHtml(c.nickname)}</div>
+            <div class="fr-gal">${UI.formatGalNumber(c.galNumber)}</div>
+          </div>
+          <div class="fr-actions">
+            <button class="btn btn-primary btn-accept-fr">接受</button>
+          </div>
+        </div>
+      `).join('');
+      
+      // 绑定接受按钮事件
+      frList.querySelectorAll('.btn-accept-fr').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const item = e.target.closest('.fr-item');
+          const contactId = parseInt(item.dataset.contactId);
+          this.acceptRequest(contactId);
+        });
+      });
+    } else {
+      container.classList.add('hidden');
+    }
+  },
+  
+  filterContacts(query) {
+    query = query.toLowerCase().trim();
+    const items = document.querySelectorAll('#contacts-list .contact-item');
+    
+    items.forEach(item => {
+      const name = item.querySelector('.contact-item-name')?.textContent.toLowerCase() || '';
+      const gal = item.dataset.gal?.toLowerCase() || '';
+      const match = !query || name.includes(query) || gal.includes(query);
+      item.style.display = match ? '' : 'none';
+    });
   },
   
   /**

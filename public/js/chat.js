@@ -88,35 +88,39 @@ const Chat = {
       this.sendTypingStatus();
     });
     
-    // 翻译按钮
+    // 工具栏按钮 - 使用 ?. 避免元素不存在时报错
     const translateBtn = document.getElementById('btn-translate');
     if (translateBtn) translateBtn.addEventListener('click', () => this.toggleTranslatePanel());
-    // 阅后即焚按钮
-    document.getElementById('btn-destroy').addEventListener('click', () => this.toggleBurnPanel());
-    // 匿踪消息按钮
-    document.getElementById('btn-anonymous').addEventListener('click', () => this.toggleAnonymousMode());
-    // 表情按钮
+    
+    const destroyBtn = document.getElementById('btn-destroy');
+    if (destroyBtn) destroyBtn.addEventListener('click', () => this.toggleBurnPanel());
+    
+    const anonymousBtn = document.getElementById('btn-anonymous');
+    if (anonymousBtn) anonymousBtn.addEventListener('click', () => this.toggleAnonymousMode());
+    
     const emojiBtn = document.getElementById('btn-emoji');
     if (emojiBtn) emojiBtn.addEventListener('click', () => this.toggleEmojiPanel());
-    // 文件按钮
+    
     const fileBtn = document.getElementById('btn-file');
     if (fileBtn) fileBtn.addEventListener('click', () => this.selectFile());
-    // 语音按钮
+    
     const voiceBtn = document.getElementById('btn-voice');
     if (voiceBtn) voiceBtn.addEventListener('click', () => this.toggleVoiceRecording());
+    
+    const imageBtn = document.getElementById('btn-image');
+    if (imageBtn) imageBtn.addEventListener('click', () => {
+      const input = document.getElementById('image-input');
+      if (input) input.click();
+    });
+    
+    const redpacketBtn = document.getElementById('btn-redpacket');
+    if (redpacketBtn) redpacketBtn.addEventListener('click', () => this.showRedPacketPanel());
+    
     // 文件输入
     const fileInput = document.getElementById('file-input');
     if (fileInput) fileInput.addEventListener('change', (e) => {
       if (e.target.files.length > 0) { this.handleFileSelected(e.target.files[0]); e.target.value = ''; }
     });
-    
-    // 图片发送按钮
-    const imgBtn = document.getElementById('btn-send-image');
-    if (imgBtn) {
-      imgBtn.addEventListener('click', () => {
-        this.selectImage();
-      });
-    }
     
     // 图片输入变化
     const imgInput = document.getElementById('image-input');
@@ -127,6 +131,63 @@ const Chat = {
         }
       });
     }
+    
+    // 初始化表情网格
+    this.initEmojiGrid();
+    
+    // 绑定翻译语言选择
+    this.bindTranslateOptions();
+    
+    // 绑定阅后即焚选项
+    this.bindBurnOptions();
+    
+    // 绑定语音录制停止
+    const voiceTimer = document.getElementById('voice-timer');
+    if (voiceTimer) {
+      voiceTimer.addEventListener('click', () => this.stopRecording());
+    }
+  },
+  
+  initEmojiGrid() {
+    const emojiGrid = document.getElementById('emoji-grid');
+    if (!emojiGrid) return;
+    const emojis = ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🤢','🤮','🤧','😷','🤒','🤕','🤑','🤗','🤠','😈','👿','👹','👺','🤡','💀','☠️','💩','🤡','👻','👽','👾','🤖','😺','😸','😹','😻','😼','😽','🙀','😿','😾','🙈','🙉','🙊','💋','💌','💘','💝','💖','💗','💓','💞','💕','💟','❣','💔','❤️','🧡','💛','💚','💙','💜','🤎','🖤','🤍','💯','💢','💥','💫','💦','💨','🕳️','💣','💬','👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🫀','🫁','🦷','🦴','👀','👁️','👅','👄','👶','🧒','👦','👧','🧑','👱','👨','🧔','👩','🧓','👴','👵','🙍','🙎','🙅','🙆','💁','🙋','🧏','🙇','🤦','🤷','👮','🕵️','💂','🥷','👷','🤴','👸','👳','👲','🧕','🤵','👰','🤰','🤱','👼','🎒','🎓','👑','📿','💄','💍','💎','🔧','🔨','⚒️','🛠️','⛏️','🪚','🔩','⚙️','🪤','🧱','⛓️','🧲','🔫','💣','🧨','🪓','🔪','🗡️','⚔️','🛡️','🚬','⚰️','⚱️','🏺','🔮','📿','💈','⚗️','🔭','🔬','🕳️','💊','💉','🩸','🩹','🩺','🚪','🛏️','🛋️','🪑','🚽','🚿','🛁','🪤','🧴','🧷','🧹','🧺','🧻','🧼','🪥','🧽','🧯','🛒','🎁','🎈','🎏','🎀','🧨','🎊','🎉','🎎','🏮','🎐','🧧','✉️','📩','📨','📧','💌','📥','📤','📦','🏷️','📪','📫','📬','📭','📮','📯','📜','📃','📄','📑','🧾','📊','📈','📉','🗒️','🗓️','📆','📅','🗑️','📇','🗃️','🗳️','🗄️','📋','📁','📂','🗂️','🗞️','📰','📓','📔','📒','📕','📗','📘','📙','📚','📖','🔖','🔗','📎','🖇️','📐','📏','🗐','🗍','✂️','🖊️','🖋️','✒️','🖌️','🖍️','📝','✏️','🔍','🔎','🔏','🔐','🔒','🔓'];
+    emojis.forEach(emoji => {
+      const btn = document.createElement('button');
+      btn.textContent = emoji;
+      btn.addEventListener('click', () => {
+        const input = document.getElementById('message-input');
+        if (input) {
+          input.value += emoji;
+          input.focus();
+        }
+        this.toggleEmojiPanel();
+      });
+      emojiGrid.appendChild(btn);
+    });
+  },
+  
+  bindTranslateOptions() {
+    document.querySelectorAll('#translate-panel .lang-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#translate-panel .lang-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+      });
+    });
+  },
+  
+  bindBurnOptions() {
+    document.querySelectorAll('#burn-panel .burn-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#burn-panel .burn-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        this.burnSeconds = parseInt(btn.dataset.seconds) || 30;
+        this.burnMode = true;
+        const destroyBtn = document.getElementById('btn-destroy');
+        if (destroyBtn) destroyBtn.classList.add('active');
+        this.closeAllPanels();
+      });
+    });
   },
   
   /**

@@ -529,6 +529,99 @@ async function startServer() {
     });
   });
 
+  // ==================== 红包API ====================
+  app.post('/api/red-packets', async (req, res) => {
+    try {
+      const { chatId, senderId, amount, count, type, message } = req.body;
+      if (!chatId || !senderId || !amount || amount <= 0 || !count || count <= 0) {
+        return res.status(400).json({ error: '参数无效' });
+      }
+      // 检查余额
+      const sender = await db.getUserByGalNumber(senderId);
+      if (!sender || (sender.balance || 0) < amount) {
+        return res.status(400).json({ error: '余额不足' });
+      }
+      // 扣除余额
+      await db.updateBalance(senderId, -(amount));
+      // 创建红包
+      const redPacket = await db.createRedPacket(chatId, senderId, amount, count, type || 'random', message || '恭喜发财，大吉大利');
+      // 发送红包消息
+      const msgId = await db.saveMessage(chatId, senderId, String(redPacket.id), 'red_packet', 0, 0, false);
+      // 通知聊天室
+      io.to(`chat-${chatId}`).emit('new-message', {
+        id: msgId, chatId, senderId, encryptedContent: String(redPacket.id),
+        type: 'red_packet', burnAfter: 0, isAnonymous: false,
+        createdAt: new Date().toISOString()
+      });
+      res.json({ success: true, redPacketId: redPacket.id });
+    } catch (err) {
+      console.error('创建红包失败:', err);
+      res.status(500).json({ error: '创建红包失败' });
+    }
+  });
+
+  app.post('/api/red-packets/:id/claim', async (req, res) => {
+    try {
+      const { userId } = req.body;
+      const rpId = req.params.id;
+      const redPacket = await db.getRedPacket(rpId);
+      if (!redPacket) return res.status(404).json({ error: '红包不存在' });
+      // 检查是否已领
+      const claimed = await db.hasClaimedRedPacket(rpId, userId);
+      if (claimed) return res.status(400).json({ error: '已领取过' });
+      // 检查是否领完
+      if (redPacket.claimed_count >= redPacket.count) return res.status(400).json({ error: '红包已领完' });
+      // 计算金额
+      let claimAmount;
+      if (redPacket.type === 'normal') {
+        claimAmount = Math.floor(redPacket.amount / redPacket.count * 100) / 100;
+      } else {
+        // 随机红包
+        const remaining = redPacket.amount - (redPacket.claimed_amount || 0);
+        const remainingCount = redPacket.count - redPacket.claimed_count;
+        if (remainingCount === 1) {
+          claimAmount = Math.round(remaining * 100) / 100;
+        } else {
+          const avg = remaining / remainingCount;
+          claimAmount = Math.round((Math.random() * avg * 2) * 100) / 100;
+          claimAmount = Math.min(claimAmount, remaining - 0.01 * (remainingCount - 1));
+        }
+      }
+      // 创建领取记录
+      await db.claimRedPacket(rpId, userId, claimAmount);
+      // 增加余额
+      await db.updateBalance(userId, claimAmount);
+      res.json({ success: true, amount: claimAmount, type: redPacket.type, message: redPacket.message });
+    } catch (err) {
+      console.error('领取红包失败:', err);
+      res.status(500).json({ error: '领取红包失败' });
+    }
+  });
+
+  app.get('/api/red-packets/:id', async (req, res) => {
+    try {
+      const rpId = req.params.id;
+      const redPacket = await db.getRedPacketWithClaims(rpId);
+      if (!redPacket) return res.status(404).json({ error: '红包不存在' });
+      res.json({ success: true, redPacket });
+    } catch (err) {
+      console.error('获取红包详情失败:', err);
+      res.status(500).json({ error: '获取红包详情失败' });
+    }
+  });
+
+  // 联系人收藏
+  app.post('/api/contacts/:id/star', async (req, res) => {
+    try {
+      const contactId = req.params.id;
+      const { isStarred } = req.body;
+      await db.toggleContactStar(contactId, isStarred);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: '操作失败' });
+    }
+  });
+
   // ==================== 翻译API ====================
   app.post('/api/translate', async (req, res) => {
     const { text, from, to } = req.body;

@@ -113,6 +113,36 @@ async function initPostgres() {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  // 创建红包表
+  await pool.query(`CREATE TABLE IF NOT EXISTS red_packets (
+    id SERIAL PRIMARY KEY,
+    chat_id INTEGER REFERENCES chats(id),
+    sender_id VARCHAR(20) REFERENCES users(gal_number),
+    amount DECIMAL(10,2) NOT NULL,
+    count INTEGER NOT NULL DEFAULT 1,
+    claimed_count INTEGER DEFAULT 0,
+    claimed_amount DECIMAL(10,2) DEFAULT 0,
+    type VARCHAR(10) DEFAULT 'random',
+    message TEXT DEFAULT '恭喜发财，大吉大利',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // 创建红包领取记录表
+  await pool.query(`CREATE TABLE IF NOT EXISTS red_packet_claims (
+    id SERIAL PRIMARY KEY,
+    red_packet_id INTEGER REFERENCES red_packets(id),
+    user_id VARCHAR(20) REFERENCES users(gal_number),
+    amount DECIMAL(10,2) NOT NULL,
+    claimed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(red_packet_id, user_id)
+  )`);
+
+  // users表添加balance字段
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS balance DECIMAL(10,2) DEFAULT 100`);
+
+  // contacts表添加is_starred字段
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_starred BOOLEAN DEFAULT FALSE`);
+
   await initAIPersonas();
   console.log('✅ PostgreSQL数据库初始化完成');
 }
@@ -233,6 +263,33 @@ async function initSqlite() {
     used INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS red_packets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER,
+    sender_id TEXT,
+    amount REAL NOT NULL,
+    count INTEGER NOT NULL DEFAULT 1,
+    claimed_count INTEGER DEFAULT 0,
+    claimed_amount REAL DEFAULT 0,
+    type TEXT DEFAULT 'random',
+    message TEXT DEFAULT '恭喜发财，大吉大利',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS red_packet_claims (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    red_packet_id INTEGER,
+    user_id TEXT,
+    amount REAL NOT NULL,
+    claimed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(red_packet_id, user_id)
+  )`);
+
+  // 添加balance字段（如果不存在）
+  try { sqlDb.run('ALTER TABLE users ADD COLUMN balance REAL DEFAULT 100'); } catch(e) {}
+  // 添加is_starred字段（如果不存在）
+  try { sqlDb.run('ALTER TABLE contacts ADD COLUMN is_starred INTEGER DEFAULT 0'); } catch(e) {}
 
   await initAIPersonas();
   saveDatabase();
@@ -755,16 +812,91 @@ async function getAIPersona(galNumber) {
   return await queryOne('SELECT * FROM ai_personas WHERE gal_number = ?', [galNumber]);
 }
 
+
+// ==================== 红包操作 ====================
+
+async function createRedPacket(chatId, senderId, amount, count, type, message) {
+  const result = await runInsert(
+    'INSERT INTO red_packets (chat_id, sender_id, amount, count, type, message) VALUES (?, ?, ?, ?, ?, ?)',
+    [chatId, senderId, amount, count, type, message]
+  );
+  return { id: result.lastInsertRowid };
+}
+
+async function getRedPacket(id) {
+  return await queryOne(
+    'SELECT * FROM red_packets WHERE id = ?',
+    [id]
+  );
+}
+
+async function getRedPacketWithClaims(id) {
+  const rp = await queryOne('SELECT * FROM red_packets WHERE id = ?', [id]);
+  if (!rp) return null;
+  const claims = await queryAll(
+    `SELECT rpc.*, u.nickname, u.avatar 
+     FROM red_packet_claims rpc 
+     JOIN users u ON rpc.user_id = u.gal_number 
+     WHERE rpc.red_packet_id = ? 
+     ORDER BY rpc.claimed_at`,
+    [id]
+  );
+  return { ...rp, claims };
+}
+
+async function claimRedPacket(rpId, userId, amount) {
+  await runSql(
+    'UPDATE red_packets SET claimed_count = claimed_count + 1, claimed_amount = claimed_amount + ? WHERE id = ?',
+    [amount, rpId]
+  );
+  await runSql(
+    'INSERT INTO red_packet_claims (red_packet_id, user_id, amount) VALUES (?, ?, ?)',
+    [rpId, userId, amount]
+  );
+}
+
+async function hasClaimedRedPacket(rpId, userId) {
+  const claim = await queryOne(
+    'SELECT * FROM red_packet_claims WHERE red_packet_id = ? AND user_id = ?',
+    [rpId, userId]
+  );
+  return !!claim;
+}
+
+// ==================== 余额操作 ====================
+
+async function getUserByGalNumber(galNumber) {
+  return await queryOne('SELECT * FROM users WHERE gal_number = ?', [galNumber]);
+}
+
+async function updateBalance(galNumber, delta) {
+  await runSql(
+    'UPDATE users SET balance = COALESCE(balance, 0) + ? WHERE gal_number = ?',
+    [delta, galNumber]
+  );
+}
+
+// ==================== 联系人收藏 ====================
+
+async function toggleContactStar(contactId, isStarred) {
+  await runSql(
+    'UPDATE contacts SET is_starred = ? WHERE id = ?',
+    [isStarred, contactId]
+  );
+}
+
 module.exports = {
   initDatabase,
   registerUser,
   loginUser,
   getUserByGal,
   getUserById,
+  getUserByGalNumber,
   updateUser,
   getContacts,
   addContact,
   acceptContact,
+  toggleContactStar,
   getChats,
   createPrivateChat,
   createGroupChat,
@@ -784,5 +916,11 @@ module.exports = {
   createPasswordReset,
   verifyPasswordReset,
   resetPassword,
-  getUserByEmail
+  getUserByEmail,
+  createRedPacket,
+  getRedPacket,
+  getRedPacketWithClaims,
+  claimRedPacket,
+  hasClaimedRedPacket,
+  updateBalance
 };

@@ -49,9 +49,18 @@ const UI = {
       contacts: '联系人',
       ai: 'AI助手',
       wallet: '钱包',
-      profile: '我的'
+      profile: '我的',
+      security: '安全设置'
     };
     document.getElementById('page-title').textContent = titles[pageId] || 'Nova-OS';
+  },
+  
+  showSecurityPage() {
+    this.showPage('security');
+  },
+  
+  backToProfile() {
+    this.showPage('profile');
   },
   
   /**
@@ -331,11 +340,12 @@ const UI = {
   /**
    * 渲染联系人列表项
    */
-  renderContactItem(contact, isPending = false, isSent = false) {
+  renderContactItem(contact, isPending = false, isSent = false, options = {}) {
     const isOnline = onlineUsers.has(contact.id);
+    const isStarred = contact.isStarred || false;
     
     return `
-      <div class="contact-item" data-contact-id="${contact.id}" data-gal="${contact.galNumber}">
+      <div class="contact-item ${isStarred ? 'starred' : ''}" data-contact-id="${contact.id}" data-gal="${contact.galNumber}" data-starred="${isStarred}">
         ${this.getAvatar(contact.avatar || 'astronaut', isOnline)}
         <div class="contact-item-info">
           <div class="contact-item-name">${this.escapeHtml(contact.nickname)}</div>
@@ -348,6 +358,10 @@ const UI = {
             <span style="color:var(--text-muted);font-size:12px;">等待对方接受</span>
           ` : `
             <button class="btn btn-secondary btn-chat">聊天</button>
+            <button class="btn-star ${isStarred ? 'active' : ''}" title="${isStarred ? '取消收藏' : '收藏'}">
+              ${isStarred ? '❤️' : '🤍'}
+            </button>
+            <button class="btn-delete" title="删除">🗑️</button>
           `}
         </div>
       </div>

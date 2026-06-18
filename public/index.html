@@ -130,11 +130,15 @@
 
         <!-- 联系人页面 -->
         <div class="page hidden" id="page-contacts">
+          <div class="contacts-header">
+            <input type="text" id="contact-search" class="contact-search" placeholder="搜索联系人或Gal号">
+          </div>
+          <div id="friend-requests" class="friend-requests hidden">
+            <div class="fr-header">新的好友请求(<span id="fr-count">0</span>)</div>
+            <div id="fr-list"></div>
+          </div>
           <div class="contacts-list" id="contacts-list">
-            <div class="empty-state">
-              <p>还没有联系人</p>
-              <p>通过Gal号码添加好友</p>
-            </div>
+            <div class="empty-state"><p>还没有联系人</p><p>通过Gal号码添加好友</p></div>
           </div>
           <button class="fab" id="btn-add-contact" title="添加联系人">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
@@ -181,25 +185,52 @@
         <!-- 我的页面 -->
         <div class="page hidden" id="page-profile">
           <div class="profile-container">
-            <div class="profile-avatar" id="profile-avatar">
-              <span>👨‍🚀</span>
-            </div>
-            <div class="profile-info">
-              <h2 id="profile-nickname">用户昵称</h2>
-              <p class="profile-gal" id="profile-gal">Gal://XXXXXXXXXXXX</p>
-            </div>
-            <div class="profile-actions">
-              <button class="btn btn-secondary" id="btn-edit-profile">编辑资料</button>
-              <button class="btn btn-danger" id="btn-logout">退出登录</button>
-            </div>
-            <div class="profile-stats">
-              <div class="stat-item">
-                <span class="stat-value" id="stat-contacts">0</span>
-                <span class="stat-label">好友</span>
+            <!-- 用户卡片 -->
+            <div class="profile-card">
+              <div class="profile-avatar" id="profile-avatar"><span>👨‍🚀</span></div>
+              <div class="profile-info">
+                <h2 id="profile-nickname">用户昵称</h2>
+                <p class="profile-gal" id="profile-gal">Gal://XXXXXXXXXXXX</p>
+                <span class="profile-encrypted">🔒 已加密</span>
               </div>
-              <div class="stat-item">
-                <span class="stat-value" id="stat-chats">0</span>
-                <span class="stat-label">聊天</span>
+            </div>
+            <!-- 功能列表 -->
+            <div class="profile-menu">
+              <div class="menu-group">
+                <div class="menu-item" id="menu-security">
+                  <span class="menu-icon">🔒</span><span class="menu-text">安全设置</span><span class="menu-arrow">›</span>
+                </div>
+                <div class="menu-item" id="menu-privacy">
+                  <span class="menu-icon">🛡️</span><span class="menu-text">隐私保护</span><span class="menu-arrow">›</span>
+                </div>
+                <div class="menu-item" id="menu-password">
+                  <span class="menu-icon">🔑</span><span class="menu-text">密码管理</span><span class="menu-arrow">›</span>
+                </div>
+              </div>
+              <div class="menu-group">
+                <div class="menu-item" id="menu-wallet">
+                  <span class="menu-icon">💰</span><span class="menu-text">我的钱包</span><span class="menu-badge" id="wallet-balance-badge">100 星币</span><span class="menu-arrow">›</span>
+                </div>
+                <div class="menu-item" id="menu-redpacket-history">
+                  <span class="menu-icon">🧧</span><span class="menu-text">红包记录</span><span class="menu-arrow">›</span>
+                </div>
+              </div>
+              <div class="menu-group">
+                <div class="menu-item" id="menu-darkmode">
+                  <span class="menu-icon">🌙</span><span class="menu-text">深色模式</span>
+                  <label class="toggle-switch"><input type="checkbox" checked id="darkmode-toggle"><span class="toggle-slider"></span></label>
+                </div>
+                <div class="menu-item" id="menu-language">
+                  <span class="menu-icon">🌐</span><span class="menu-text">语言设置</span><span class="menu-value">中文</span><span class="menu-arrow">›</span>
+                </div>
+                <div class="menu-item" id="menu-about">
+                  <span class="menu-icon">📱</span><span class="menu-text">关于Nova-OS</span><span class="menu-value">v2.0</span><span class="menu-arrow">›</span>
+                </div>
+              </div>
+              <div class="menu-group">
+                <div class="menu-item danger" id="btn-logout">
+                  <span class="menu-icon">🚪</span><span class="menu-text">退出登录</span>
+                </div>
               </div>
             </div>
           </div>
@@ -268,44 +299,154 @@
         <!-- 正在输入提示 -->
       </div>
       <div class="chat-input-area">
-        <div class="message-options">
-          <button class="btn-icon btn-option" id="btn-destroy" title="阅后即焚">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/>
-            </svg>
-          </button>
-          <button class="btn-icon btn-option" id="btn-anonymous" title="匿踪消息">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
-          </button>
-          <button class="btn-icon btn-option" id="btn-send-image" title="发送图片">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-            </svg>
-          </button>
+        <!-- 输入工具栏 -->
+        <div class="input-toolbar" id="input-toolbar">
+          <button class="toolbar-btn" id="btn-emoji" title="表情">😊</button>
+          <button class="toolbar-btn" id="btn-image" title="图片">🖼️</button>
+          <button class="toolbar-btn" id="btn-file" title="文件">📎</button>
+          <button class="toolbar-btn" id="btn-voice" title="语音">🎙️</button>
+          <button class="toolbar-btn" id="btn-translate" title="翻译">🌐</button>
+          <button class="toolbar-btn" id="btn-destroy" title="阅后即焚">🔥</button>
+          <button class="toolbar-btn" id="btn-anonymous" title="匿踪">👁️</button>
         </div>
-        <div class="destroy-timer hidden" id="destroy-timer">
-          <span>阅后</span>
-          <select id="destroy-ttl">
-            <option value="3">3秒</option>
-            <option value="10">10秒</option>
-            <option value="30" selected>30秒</option>
-            <option value="60">60秒</option>
-          </select>
+        <!-- 表情面板 -->
+        <div class="input-panel hidden" id="emoji-panel">
+          <div class="emoji-grid" id="emoji-grid"></div>
         </div>
-        <input type="text" id="message-input" placeholder="输入消息..." autocomplete="off">
+        <!-- 翻译面板 -->
+        <div class="input-panel hidden" id="translate-panel">
+          <div class="translate-header">选择翻译语言</div>
+          <div class="lang-grid">
+            <button class="lang-btn selected" data-lang="zh-CN">🇨🇳 中文简体</button>
+            <button class="lang-btn" data-lang="zh-TW">🇨🇳 中文繁体</button>
+            <button class="lang-btn" data-lang="en-US">🇺🇸 English</button>
+            <button class="lang-btn" data-lang="en-GB">🇬🇧 English(UK)</button>
+            <button class="lang-btn" data-lang="ja">🇯🇵 日本語</button>
+            <button class="lang-btn" data-lang="ko">🇰🇷 한국어</button>
+            <button class="lang-btn" data-lang="fr">🇫🇷 Français</button>
+            <button class="lang-btn" data-lang="de">🇩🇪 Deutsch</button>
+            <button class="lang-btn" data-lang="es">🇪🇸 Español</button>
+            <button class="lang-btn" data-lang="it">🇮🇹 Italiano</button>
+            <button class="lang-btn" data-lang="ru">🇷🇺 Русский</button>
+            <button class="lang-btn" data-lang="ar">🇸🇦 العربية</button>
+          </div>
+          <div class="auto-translate">
+            <span>自动翻译</span>
+            <label class="toggle-switch"><input type="checkbox" id="auto-translate-toggle"><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+        <!-- 阅后即焚面板 -->
+        <div class="input-panel hidden" id="burn-panel">
+          <div class="burn-header">🔥 阅后即焚<span>消息将在对方阅读后自动销毁</span></div>
+          <div class="burn-options">
+            <button class="burn-btn" data-seconds="5">5秒</button>
+            <button class="burn-btn" data-seconds="10">10秒</button>
+            <button class="burn-btn selected" data-seconds="30">30秒</button>
+            <button class="burn-btn" data-seconds="60">60秒</button>
+          </div>
+        </div>
+        <!-- 匿踪提示 -->
+        <div class="input-panel hidden" id="anonymous-panel">
+          <div class="anonymous-tip">👁️ 匿踪信息 — 发送的消息将不显示发送者信息</div>
+        </div>
+        <!-- 隐藏的文件输入 -->
+        <input type="file" id="file-input" style="display:none;">
         <!-- 隐藏的图片输入 -->
         <input type="file" id="image-input" accept="image/*" style="display:none;">
-        <button class="btn-icon btn-send" id="btn-send-message">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-          </svg>
-        </button>
+        <!-- 语音录制计时 -->
+        <div class="voice-recording-bar hidden" id="voice-timer">
+          <span class="voice-dot"></span>
+          <span>录音中 </span><span id="voice-duration">0:00</span>
+          <span>点击停止</span>
+        </div>
+        <!-- 输入框区域 -->
+        <div class="input-row">
+          <input type="text" id="message-input" placeholder="输入消息..." autocomplete="off">
+          <button class="btn-icon" id="btn-redpacket" title="红包">🧧</button>
+          <button class="btn-icon btn-send" id="btn-send-message">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- AI聊天窗口 -->
+    
+    <!-- 安全设置页面 -->
+    <div class="page hidden" id="page-security">
+      <div class="security-header">
+        <button class="btn-icon btn-back" id="btn-security-back">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+        <div><h2>安全设置</h2><p>隐私与加密管理</p></div>
+      </div>
+      <div class="security-list">
+        <div class="security-card" data-module="encryption">
+          <div class="sc-header"><span class="sc-icon green">🔒</span><span class="sc-title">端到端加密</span><span class="sc-status enabled" id="sec-encryption-status">已启用</span></div>
+          <div class="sc-desc">所有消息都经过加密传输，确保只有发送者和接收者能够查看</div>
+          <div class="sc-detail hidden" id="sec-encryption-detail">
+            <div class="sc-param"><span>加密算法</span><span>AES-256-GCM</span></div>
+            <div class="sc-param"><span>密钥交换</span><span>ECDH</span></div>
+            <div class="sc-param"><span>加密级别</span><span>军用级</span></div>
+          </div>
+          <label class="toggle-switch sc-toggle"><input type="checkbox" checked id="sec-encryption-toggle"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="security-card" data-module="decentralized">
+          <div class="sc-header"><span class="sc-icon purple">🗄️</span><span class="sc-title">去中心化存储</span><span class="sc-status enabled">已启用</span></div>
+          <div class="sc-desc">消息分散存储，确保数据安全和隐私保护</div>
+          <div class="sc-detail hidden">
+            <div class="sc-param"><span>存储节点</span><span>3个</span></div>
+            <div class="sc-param"><span>数据冗余</span><span>3x</span></div>
+            <div class="sc-param"><span>完整性校验</span><span>实时</span></div>
+          </div>
+        </div>
+        <div class="security-card" data-module="wallet-lock">
+          <div class="sc-header"><span class="sc-icon green">🛡️</span><span class="sc-title">钱包加密锁屏</span><span class="sc-status" id="sec-wallet-status">已禁用</span></div>
+          <div class="sc-desc">为钱包设置密码保护，超时自动锁定</div>
+          <div class="sc-detail hidden">
+            <div class="sc-param"><span>密码保护</span><span id="sec-wallet-pwd">未启用</span></div>
+            <div class="sc-param"><span>超时锁定</span><span>5分钟</span></div>
+            <div class="sc-param"><span>安全级别</span><span>高</span></div>
+          </div>
+          <label class="toggle-switch sc-toggle"><input type="checkbox" id="sec-wallet-toggle"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="security-card" data-module="anti-scan">
+          <div class="sc-header"><span class="sc-icon blue">🔍</span><span class="sc-title">反扫描保护</span><span class="sc-status" id="sec-antiscan-status">已禁用</span></div>
+          <div class="sc-desc">防止大数据追踪和扫描，保护隐私信息</div>
+          <div class="sc-detail hidden">
+            <div class="sc-param"><span>IP地址混淆</span><span id="sec-ip-mix">关闭</span></div>
+            <div class="sc-param"><span>元数据清除</span><span id="sec-meta-clean">关闭</span></div>
+            <div class="sc-param"><span>行为模式保护</span><span id="sec-behavior-prot">关闭</span></div>
+          </div>
+          <label class="toggle-switch sc-toggle"><input type="checkbox" id="sec-antiscan-toggle"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="security-card" data-module="burn">
+          <div class="sc-header"><span class="sc-icon orange">⏱️</span><span class="sc-title">阅后即焚</span><span class="sc-status optional">可选</span></div>
+          <div class="sc-desc">设置消息自动销毁时间，保护敏感信息</div>
+          <div class="sc-detail hidden">
+            <div class="sc-param"><span>可选时间</span><span>5秒-1分钟</span></div>
+            <div class="sc-param"><span>自动删除</span><span>✓</span></div>
+            <div class="sc-param"><span>无法恢复</span><span>✓</span></div>
+          </div>
+        </div>
+        <div class="security-card" data-module="anonymous">
+          <div class="sc-header"><span class="sc-icon pink">🚫</span><span class="sc-title">匿踪讯息</span><span class="sc-status optional">可选</span></div>
+          <div class="sc-desc">发送匿名消息，隐藏发送者信息</div>
+          <div class="sc-detail hidden">
+            <div class="sc-param"><span>发送者隐藏</span><span>✓</span></div>
+            <div class="sc-param"><span>无法追踪</span><span>✓</span></div>
+            <div class="sc-param"><span>完全匿名</span><span>✓</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="security-notice">
+        <span class="notice-icon">🛡️</span>
+        <p>Nova-OS采用最先进的安全技术保护您的隐私。所有消息都经过端到端加密，我们无法查看您的内容。请妥善保管您的Gal号，不要分享给不信任的人。</p>
+      </div>
+    </div>
+
+<!-- AI聊天窗口 -->
     <div id="ai-chat-window" class="chat-window hidden">
       <div class="chat-header">
         <button class="btn-icon btn-back" id="btn-ai-chat-back">
