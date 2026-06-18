@@ -87,6 +87,9 @@ async function initPostgres() {
     ttl INTEGER,
     read_by TEXT,
     is_recalled BOOLEAN DEFAULT FALSE,
+    burn_after INTEGER DEFAULT 0,
+    burned_at TIMESTAMP,
+    is_anonymous BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -208,6 +211,8 @@ async function initSqlite() {
     ttl INTEGER,
     read_by TEXT,
     is_recalled INTEGER DEFAULT 0,
+    burn_after INTEGER DEFAULT 0,
+    is_anonymous INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -662,17 +667,17 @@ async function getChatMembers(chatId) {
 
 // ==================== 消息操作 ====================
 
-async function saveMessage(chatId, senderId, encryptedContent, type = 'normal', ttl = null) {
+async function saveMessage(chatId, senderId, encryptedContent, type = 'normal', ttl = null, burnAfter = 0, isAnonymous = false) {
   const result = await runInsert(
-    'INSERT INTO messages (chat_id, sender_id, encrypted_content, type, ttl) VALUES (?, ?, ?, ?, ?)',
-    [chatId, senderId, encryptedContent, type, ttl]
+    'INSERT INTO messages (chat_id, sender_id, encrypted_content, type, ttl, burn_after, is_anonymous) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [chatId, senderId, encryptedContent, type, ttl, burnAfter, isAnonymous]
   );
   return result.lastInsertRowid;
 }
 
 async function getMessages(chatId, limit = 50, offset = 0) {
   return await queryAll(
-    `SELECT m.id, m.chat_id, m.sender_id, m.encrypted_content, m.type, m.ttl, m.read_by, m.is_recalled, m.created_at,
+    `SELECT m.id, m.chat_id, m.sender_id, m.encrypted_content, m.type, m.ttl, m.read_by, m.is_recalled, m.burn_after, m.burned_at, m.is_anonymous, m.created_at,
             u.gal_number, u.nickname, u.avatar
      FROM messages m
      LEFT JOIN users u ON m.sender_id = u.id
@@ -715,6 +720,31 @@ async function markMessageRead(chatId, userId, messageId) {
   return true;
 }
 
+// ==================== 阅后即焚操作 ====================
+
+async function markMessageBurned(messageId) {
+  const result = await runSql(
+    'UPDATE messages SET encrypted_content = ?, burned_at = ? WHERE id = ?',
+    ['🔥 此消息已销毁', new Date().toISOString(), messageId]
+  );
+  return result.changes > 0;
+}
+
+async function getUnburnedMessages(chatId) {
+  return await queryAll(
+    'SELECT * FROM messages WHERE chat_id = ? AND burn_after > 0 AND burned_at IS NULL',
+    [chatId]
+  );
+}
+
+async function updateMessageTranslation(messageId, translation) {
+  const result = await runSql(
+    'UPDATE messages SET translation = ? WHERE id = ?',
+    [translation, messageId]
+  );
+  return result.changes > 0;
+}
+
 // ==================== AI人格操作 ====================
 
 async function getAIPersonas() {
@@ -746,6 +776,9 @@ module.exports = {
   recallMessage,
   getMessageById,
   markMessageRead,
+  markMessageBurned,
+  getUnburnedMessages,
+  updateMessageTranslation,
   getAIPersonas,
   getAIPersona,
   createPasswordReset,

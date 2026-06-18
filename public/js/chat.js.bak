@@ -88,26 +88,19 @@ const Chat = {
       this.sendTypingStatus();
     });
     
-    // 翻译按钮
-    const translateBtn = document.getElementById('btn-translate');
-    if (translateBtn) translateBtn.addEventListener('click', () => this.toggleTranslatePanel());
     // 阅后即焚按钮
-    document.getElementById('btn-destroy').addEventListener('click', () => this.toggleBurnPanel());
+    document.getElementById('btn-destroy').addEventListener('click', () => {
+      const btn = document.getElementById('btn-destroy');
+      const timer = document.getElementById('destroy-timer');
+      btn.classList.toggle('active');
+      timer.classList.toggle('hidden');
+    });
+    
     // 匿踪消息按钮
-    document.getElementById('btn-anonymous').addEventListener('click', () => this.toggleAnonymousMode());
-    // 表情按钮
-    const emojiBtn = document.getElementById('btn-emoji');
-    if (emojiBtn) emojiBtn.addEventListener('click', () => this.toggleEmojiPanel());
-    // 文件按钮
-    const fileBtn = document.getElementById('btn-file');
-    if (fileBtn) fileBtn.addEventListener('click', () => this.selectFile());
-    // 语音按钮
-    const voiceBtn = document.getElementById('btn-voice');
-    if (voiceBtn) voiceBtn.addEventListener('click', () => this.toggleVoiceRecording());
-    // 文件输入
-    const fileInput = document.getElementById('file-input');
-    if (fileInput) fileInput.addEventListener('change', (e) => {
-      if (e.target.files.length > 0) { this.handleFileSelected(e.target.files[0]); e.target.value = ''; }
+    document.getElementById('btn-anonymous').addEventListener('click', () => {
+      const btn = document.getElementById('btn-anonymous');
+      btn.classList.toggle('active');
+      UI.showToast(btn.classList.contains('active') ? '匿踪模式已开启' : '匿踪模式已关闭');
     });
     
     // 图片发送按钮
@@ -905,282 +898,7 @@ const Chat = {
         .filter(m => m.id !== messageId);
     }
   },
-
-  // 翻译功能
-  toggleTranslatePanel() {
-    const panel = document.getElementById('translate-panel');
-    if (!panel) return;
-    const isVisible = panel.classList.contains('visible');
-    this.closeAllPanels();
-    if (!isVisible) panel.classList.add('visible');
-  },
-  toggleBurnPanel() {
-    const panel = document.getElementById('burn-panel');
-    if (!panel) return;
-    const isVisible = panel.classList.contains('visible');
-    this.closeAllPanels();
-    if (!isVisible) panel.classList.add('visible');
-  },
-  toggleAnonymousMode() {
-    const btn = document.getElementById('btn-anonymous');
-    this.anonymousMode = !this.anonymousMode;
-    btn.classList.toggle('active', this.anonymousMode);
-    this.closeAllPanels();
-    if (this.anonymousMode) { UI.showToast('匿踪模式已开启'); this.showAnonymousHint(); }
-    else { this.hideAnonymousHint(); UI.showToast('匿踪模式已关闭'); }
-  },
-  showAnonymousHint() {
-    let hint = document.getElementById('anonymous-hint');
-    if (!hint) {
-      hint = document.createElement('div');
-      hint.id = 'anonymous-hint';
-      hint.className = 'anonymous-hint';
-      hint.textContent = '发送的消息将不显示发送者信息';
-      const inputArea = document.querySelector('.chat-input-area');
-      if (inputArea && inputArea.parentNode) inputArea.parentNode.insertBefore(hint, inputArea);
-    }
-    hint.classList.add('visible');
-  },
-  hideAnonymousHint() {
-    const hint = document.getElementById('anonymous-hint');
-    if (hint) hint.classList.remove('visible');
-  },
-  closeAllPanels() {
-    document.querySelectorAll('.feature-panel').forEach(p => p.classList.remove('visible'));
-  },
-  selectTargetLang(lang) {
-    this.selectedTargetLang = lang;
-    document.querySelectorAll('#translate-panel .lang-btn').forEach(btn => btn.classList.toggle('selected', btn.dataset.lang === lang));
-    this.translateMode = true;
-    const translateBtn = document.getElementById('btn-translate');
-    if (translateBtn) translateBtn.classList.add('active');
-    this.closeAllPanels();
-    UI.showToast('翻译模式已开启 -> ' + lang);
-  },
-  selectBurnTime(seconds) {
-    this.burnSeconds = seconds;
-    this.burnMode = true;
-    document.querySelectorAll('#burn-panel .burn-option').forEach(btn => btn.classList.toggle('selected', parseInt(btn.dataset.seconds) === seconds));
-    const burnBtn = document.getElementById('btn-destroy');
-    if (burnBtn) burnBtn.classList.add('active');
-    this.closeAllPanels();
-    UI.showToast('阅后即焚已开启 (' + seconds + '秒)');
-  },
-  disableBurnMode() {
-    this.burnMode = false;
-    const burnBtn = document.getElementById('btn-destroy');
-    if (burnBtn) burnBtn.classList.remove('active');
-    this.closeAllPanels();
-  },
-  async translateMessage(messageId, text) {
-    if (this.translations[messageId]) { this.hideTranslation(messageId); return; }
-    try {
-      const response = await fetch('/api/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text, from: 'auto', to: this.selectedTargetLang || 'zh' })
-      });
-      const data = await response.json();
-      if (data.success && data.translatedText) { this.translations[messageId] = data.translatedText; this.showTranslation(messageId, data.translatedText); }
-      else UI.showToast('翻译失败');
-    } catch (error) { console.error('翻译失败:', error); UI.showToast('翻译请求失败'); }
-  },
-  showTranslation(messageId, text) {
-    const messageEl = document.querySelector('[data-message-id="' + messageId + '"]');
-    if (!messageEl) return;
-    let transEl = messageEl.querySelector('.message-translation');
-    if (!transEl) { transEl = document.createElement('div'); transEl.className = 'message-translation'; messageEl.appendChild(transEl); }
-    transEl.textContent = text;
-    transEl.classList.add('visible');
-  },
-  hideTranslation(messageId) {
-    const messageEl = document.querySelector('[data-message-id="' + messageId + '"]');
-    if (messageEl) { const t = messageEl.querySelector('.message-translation'); if (t) t.classList.remove('visible'); }
-  },
-  toggleEmojiPanel() {
-    const panel = document.getElementById('emoji-panel');
-    if (!panel) return;
-    const isVisible = panel.classList.contains('visible');
-    this.closeAllPanels();
-    if (!isVisible) panel.classList.add('visible');
-  },
-  insertEmoji(emoji) {
-    const input = document.getElementById('message-input');
-    if (input) { input.value += emoji; input.focus(); }
-    this.closeAllPanels();
-  },
-  selectFile() { const input = document.getElementById('file-input'); if (input) input.click(); },
-  handleFileSelected(file) {
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { UI.showToast('文件大小不能超过5MB'); return; }
-    const reader = new FileReader();
-    reader.onload = (e) => this.sendFileMessage(file.name, file.size, file.type, e.target.result);
-    reader.onerror = () => UI.showToast('文件读取失败');
-    reader.readAsDataURL(file);
-  },
-  async sendFileMessage(fileName, fileSize, fileType, base64) {
-    if (!this.currentChat) return;
-    const content = JSON.stringify({type: 'file', fileName, fileSize, fileType, content: base64});
-    const message = {chatId: this.currentChat.id, senderId: Auth.getCurrentUserId(), encryptedContent: content, type: 'file', ttl: null, burnAfter: this.burnMode ? this.burnSeconds : 0, isAnonymous: this.anonymousMode};
-    if (window.socket && window.socket.connected) window.socket.emit('send-message', message);
-    else await fetch('/api/chats/' + message.chatId + '/messages', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(message)});
-    const localMessage = {id: 'local-' + Date.now(), chatId: message.chatId, senderId: Auth.getCurrentUserId(), galNumber: Auth.currentUser?.galNumber || '', nickname: Auth.currentUser?.nickname || '', encryptedContent: content, type: 'file', metadata: {fileName, fileSize, fileType}, createdAt: new Date().toISOString()};
-    if (!this.chatMessages[message.chatId]) this.chatMessages[message.chatId] = [];
-    this.chatMessages[message.chatId].push(localMessage);
-    this.displayMessage(localMessage, true);
-    document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
-  },
-  async toggleVoiceRecording() { if (this.isRecording) this.stopRecording(); else this.startRecording(); },
-  async startRecording() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-      this.audioChunks = [];
-      this.mediaRecorder = new MediaRecorder(stream);
-      this.mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) this.audioChunks.push(e.data); };
-      this.mediaRecorder.onstop = () => { const blob = new Blob(this.audioChunks, {type: 'audio/webm'}); this.sendVoiceMessage(blob); stream.getTracks().forEach(t => t.stop()); };
-      this.mediaRecorder.start();
-      this.isRecording = true;
-      this.recordingSeconds = 0;
-      const voiceBtn = document.getElementById('btn-voice');
-      if (voiceBtn) voiceBtn.classList.add('recording');
-      this.recordingTimer = setInterval(() => {
-        this.recordingSeconds++;
-        if (this.recordingSeconds >= 60) { this.stopRecording(); UI.showToast('录音已达60秒上限'); }
-        const timerEl = document.getElementById('voice-timer');
-        if (timerEl) timerEl.textContent = this.formatTime(this.recordingSeconds);
-      }, 1000);
-    } catch (error) { console.error('录音启动失败:', error); UI.showToast('无法访问麦克风'); }
-  },
-  stopRecording() {
-    if (this.mediaRecorder && this.isRecording) {
-      this.mediaRecorder.stop();
-      this.isRecording = false;
-      clearInterval(this.recordingTimer);
-      const voiceBtn = document.getElementById('btn-voice');
-      if (voiceBtn) voiceBtn.classList.remove('recording');
-      const timerEl = document.getElementById('voice-timer');
-      if (timerEl) timerEl.textContent = '0s';
-    }
-  },
-  formatTime(seconds) { const m = Math.floor(seconds / 60); const s = seconds % 60; return m + ':' + (s < 10 ? '0' : '') + s; },
-  async sendVoiceMessage(blob) {
-    if (!this.currentChat) return;
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64 = e.target.result;
-      const duration = this.recordingSeconds;
-      const content = JSON.stringify({type: 'voice', duration, content: base64});
-      const message = {chatId: this.currentChat.id, senderId: Auth.getCurrentUserId(), encryptedContent: content, type: 'voice', ttl: null, burnAfter: this.burnMode ? this.burnSeconds : 0, isAnonymous: this.anonymousMode};
-      if (window.socket && window.socket.connected) window.socket.emit('send-message', message);
-      else await fetch('/api/chats/' + message.chatId + '/messages', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(message)});
-      const localMessage = {id: 'local-' + Date.now(), chatId: message.chatId, senderId: Auth.getCurrentUserId(), galNumber: Auth.currentUser?.galNumber || '', nickname: Auth.currentUser?.nickname || '', encryptedContent: content, type: 'voice', metadata: {duration}, createdAt: new Date().toISOString()};
-      if (!this.chatMessages[message.chatId]) this.chatMessages[message.chatId] = [];
-      this.chatMessages[message.chatId].push(localMessage);
-      this.displayMessage(localMessage, true);
-      document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
-    };
-    reader.readAsDataURL(blob);
-  },
-  togglePlayVoice(element, audioUrl) {
-    const existing = element.querySelector('audio');
-    if (existing) { if (existing.paused) { existing.play(); element.classList.add('playing'); } else { existing.pause(); element.classList.remove('playing'); } return; }
-    const audio = document.createElement('audio');
-    audio.src = audioUrl;
-    audio.onended = () => element.classList.remove('playing');
-    audio.onerror = () => UI.showToast('音频播放失败');
-    element.appendChild(audio);
-    audio.play();
-    element.classList.add('playing');
-  },
-  formatFileSize(bytes) { if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / (1024 * 1024)).toFixed(1) + ' MB'; },
-  handleMessageBurned(data) {
-    const messageEl = document.querySelector('[data-message-id="' + data.messageId + '"]');
-    if (messageEl) {
-      const contentEl = messageEl.querySelector('.message-content');
-      if (contentEl) { contentEl.innerHTML = '<span class="burned-message">此消息已销毁</span>'; contentEl.classList.add('burned'); }
-      messageEl.classList.add('burned');
-      messageEl.dataset.burned = 'true';
-    }
-  },
-  handleMessageRead(data) {
-    const messageEl = document.querySelector('[data-message-id="' + data.messageId + '"]');
-    if (messageEl && messageEl.dataset.burnAfter && !messageEl.dataset.burned) this.startBurnCountdown(messageEl, parseInt(messageEl.dataset.burnAfter));
-  },
-  startBurnCountdown(messageEl, seconds) {
-    const countdownEl = messageEl.querySelector('.burn-countdown');
-    if (!countdownEl) return;
-    let remaining = seconds;
-    const interval = setInterval(() => {
-      remaining--;
-      if (countdownEl) countdownEl.textContent = remaining + 's';
-      if (remaining <= 0) {
-        clearInterval(interval);
-        if (messageEl && !messageEl.dataset.burned) {
-          const contentEl = messageEl.querySelector('.message-content');
-          if (contentEl) { contentEl.innerHTML = '<span class="burned-message">此消息已销毁</span>'; contentEl.classList.add('burned'); }
-          messageEl.classList.add('burned');
-          messageEl.dataset.burned = 'true';
-        }
-      }
-    }, 1000);
-  },
-  showRedPacketPanel() {
-    const panel = document.getElementById('redpacket-panel');
-    if (!panel) return;
-    this.closeAllPanels();
-    panel.classList.add('visible');
-  },
-  async sendRedPacket() {
-    const amount = parseFloat(document.getElementById('rp-amount').value);
-    const count = parseInt(document.getElementById('rp-count').value) || 1;
-    const type = document.querySelector('#rp-type-normal.active') ? 'normal' : 'random';
-    const message = document.getElementById('rp-message').value || '恭喜发财，大吉大利';
-    if (!amount || amount <= 0) { UI.showToast('请输入有效金额'); return; }
-    if (!count || count <= 0) { UI.showToast('请输入有效个数'); return; }
-    try {
-      const response = await fetch('/api/red-packets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({chatId: this.currentChat.id, senderId: Auth.getCurrentUserId(), amount, count, type, message})
-      });
-      const data = await response.json();
-      if (data.success) { this.closeAllPanels(); UI.showToast('红包已发送'); Wallet && Wallet.loadBalance && Wallet.loadBalance(); }
-      else UI.showToast(data.error || '发送红包失败');
-    } catch (error) { console.error('发送红包失败:', error); UI.showToast('发送红包失败'); }
-  },
-  async claimRedPacket(redPacketId) {
-    try {
-      const response = await fetch('/api/red-packets/' + redPacketId + '/claim', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({userId: Auth.getCurrentUserId()})
-      });
-      const data = await response.json();
-      if (data.success) { this.showRedPacketResult(data); Wallet && Wallet.loadBalance && Wallet.loadBalance(); }
-      else UI.showToast(data.error || '领取红包失败');
-    } catch (error) { console.error('领取红包失败:', error); UI.showToast('领取红包失败'); }
-  },
-  showRedPacketResult(data) {
-    UI.showModal('领取结果', '<div class="redpacket-result"><div class="rp-amount">' + data.amount + ' 星币</div><div class="rp-type">' + (data.type === 'random' ? '随机红包' : '普通红包') + '</div><div class="rp-message">' + (data.message || '') + '</div></div>', [{text: '确定', class: 'btn-primary'}]);
-  },
-  handleRedPacketClick(redPacketId, claimed, isOwner) {
-    if (!redPacketId) return;
-    if (claimed || isOwner) this.viewRedPacketDetail(redPacketId);
-    else this.claimRedPacket(redPacketId);
-  },
-  async viewRedPacketDetail(redPacketId) {
-    try {
-      const response = await fetch('/api/red-packets/' + redPacketId);
-      const data = await response.json();
-      if (data.success) {
-        const rp = data.redPacket;
-        const claims = data.claims || [];
-        let claimsHtml = claims.map(function(c) { return '<div class="rp-claim-item"><span>' + c.nickname + '</span><span>' + c.amount + '</span></div>'; }).join('');
-        UI.showModal('红包详情', '<div class="rp-detail"><div class="rp-detail-header"><span class="rp-icon">🧧</span><div class="rp-info"><div class="rp-amount">' + rp.amount + ' 星币</div><div class="rp-count">' + rp.claimed_count + '/' + rp.count + ' 领取</div></div></div><div class="rp-message">' + rp.message + '</div><div class="rp-claims">' + (claimsHtml || '<div class="rp-no-claims">暂无领取记录</div>') + '</div></div>', [{text: '确定', class: 'btn-primary'}]);
-      }
-    } catch (error) { console.error('获取红包详情失败:', error); }
-  },
-
+  
   /**
    * 发送消息
    */
@@ -1191,10 +909,9 @@ const Chat = {
     if (!content || !this.currentChat) return;
     
     // 检查消息类型
-    const isDestroy = this.burnMode;
-    const isAnonymous = this.anonymousMode;
-    const ttl = null;
-    const burnAfter = isDestroy ? this.burnSeconds : 0;
+    const isDestroy = document.getElementById('btn-destroy').classList.contains('active');
+    const isAnonymous = document.getElementById('btn-anonymous').classList.contains('active');
+    const ttl = isDestroy ? parseInt(document.getElementById('destroy-ttl').value) : null;
     
     try {
       // 构造消息内容
@@ -1247,9 +964,7 @@ const Chat = {
         senderId: Auth.getCurrentUserId(),
         encryptedContent,
         type: isAnonymous ? 'anonymous' : (isDestroy ? 'self-destruct' : 'normal'),
-        ttl,
-        burnAfter,
-        isAnonymous
+        ttl
       };
       
       // 通过Socket发送
@@ -1279,8 +994,6 @@ const Chat = {
         encryptedContent: content,
         type: message.type,
         ttl: message.ttl,
-        burnAfter: message.burnAfter,
-        isAnonymous: message.isAnonymous,
         createdAt: new Date().toISOString()
       };
       this.displayMessage(localMessage, true);
@@ -1340,12 +1053,12 @@ const Chat = {
    * 关闭聊天窗口
    */
   closeChat() {
-    if (this.isRecording) this.stopRecording();
     if (this.currentChat) {
       window.socket.emit('leave-chat', this.currentChat.id);
       this.sendStopTyping();
       this.currentChat = null;
     }
+    
     UI.hideChatWindow();
   },
   
@@ -1466,11 +1179,12 @@ function registerSocketEvents() {
   });
 
   s.on('message-read-by', (data) => {
-    Chat.handleMessageRead(data);
-    const messageEl = document.querySelector('[data-message-id="' + data.messageId + '"] .message-status');
-    if (messageEl) { messageEl.textContent = '✓✓'; messageEl.classList.add('read'); }
+    const messageEl = document.querySelector(`[data-message-id="${data.messageId}"] .message-status`);
+    if (messageEl) {
+      messageEl.textContent = '✓✓';
+      messageEl.classList.add('read');
+    }
   });
-  s.on('message-burned', (data) => { Chat.handleMessageBurned(data); });
 }
 
 window.registerSocketEvents = registerSocketEvents;

@@ -397,3 +397,39 @@ if (typeof socket !== 'undefined') {
 // 导出UI模块
 window.UI = UI;
 window.onlineUsers = onlineUsers;
+
+// ==================== 图片预览功能 ====================
+UI.previewImage = function(src) {
+  const overlay = document.createElement('div');
+  overlay.className = 'image-preview-overlay';
+  overlay.onclick = () => overlay.remove();
+  
+  const img = document.createElement('img');
+  img.className = 'image-preview';
+  img.src = src;
+  
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'close-btn';
+  closeBtn.innerHTML = '✕';
+  closeBtn.onclick = (e) => {
+    e.stopPropagation();
+    overlay.remove();
+  };
+  
+  overlay.appendChild(img);
+  overlay.appendChild(closeBtn);
+  document.body.appendChild(overlay);
+};
+
+// ==================== 文件下载功能 ====================
+UI.downloadFile = function(base64Data, fileName) {
+  try {
+    const link = document.createElement('a');
+    link.href = base64Data;
+    link.download = fileName;
+    link.click();
+  } catch (error) {
+    console.error('下载失败:', error);
+    UI.showToast('文件下载失败');
+  }
+};

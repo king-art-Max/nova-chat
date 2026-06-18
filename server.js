@@ -529,6 +529,99 @@ async function startServer() {
     });
   });
 
+  // ==================== 翻译API ====================
+  app.post('/api/translate', async (req, res) => {
+    const { text, from, to } = req.body;
+    if (!text || !from || !to) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    
+    try {
+      if (process.env.DEEPSEEK_API_KEY) {
+        const langNames = {
+          'zh': '中文', 'zh-TW': '中文繁体', 'en': '英语', 'en-GB': '英式英语',
+          'ja': '日语', 'ko': '韩语', 'fr': '法语', 'de': '德语',
+          'es': '西班牙语', 'it': '意大利语', 'ru': '俄语', 'ar': '阿拉伯语'
+        };
+        const fromName = langNames[from] || from;
+        const toName = langNames[to] || to;
+        
+        const response = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: [
+              { role: 'user', content: `请将以下文本从${fromName}翻译为${toName}，只返回翻译结果，不要任何解释：
+
+${text}` }
+            ],
+            stream: false
+          })
+        });
+        
+        const data = await response.json();
+        if (data.error) {
+          console.error('翻译API错误:', data.error);
+          return res.status(500).json({ success: false, error: '翻译服务错误' });
+        }
+        
+        const translatedText = data.choices?.[0]?.message?.content?.trim() || text;
+        return res.json({ success: true, translatedText });
+      } else {
+        // 无API Key时返回原文
+        return res.json({ success: true, translatedText: text, fallback: true });
+      }
+    } catch (error) {
+      console.error('翻译请求失败:', error);
+      return res.status(500).json({ success: false, error: '翻译请求失败' });
+    }
+  });
+
+  // 标记消息已读并处理阅后即焚
+  app.post('/api/chats/:id/messages/:messageId/read', async (req, res) => {
+    const messageId = parseInt(req.params.messageId);
+    const chatId = parseInt(req.params.id);
+    const { userId } = req.body;
+    
+    if (!messageId || !chatId || !userId) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    
+    try {
+      await db.markMessageRead(chatId, userId, messageId);
+      
+      // 检查是否是阅后即焚消息
+      const message = await db.getMessageById(messageId);
+      if (message && message.burn_after > 0 && !message.burned_at) {
+        // 广播已读事件
+        io.to(`chat-${chatId}`).emit('message-read-by', { messageId, userId });
+        
+        // 设置阅后即焚定时器
+        const burnAfterSeconds = message.burn_after;
+        setTimeout(async () => {
+          try {
+            await db.markMessageBurned(messageId);
+            io.to(`chat-${chatId}`).emit('message-burned', { messageId, chatId });
+          } catch (err) {
+            console.error('销毁消息失败:', err);
+          }
+        }, burnAfterSeconds * 1000);
+        
+        return res.json({ success: true, burnAfter: burnAfterSeconds });
+      }
+      
+      io.to(`chat-${chatId}`).emit('message-read-by', { messageId, userId });
+      res.json({ success: true });
+    } catch (error) {
+      console.error('标记已读失败:', error);
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+
   // ==================== Socket.io 事件 ====================
 
   io.on('connection', (socket) => {
@@ -549,9 +642,9 @@ async function startServer() {
     });
     
     socket.on('send-message', async (data) => {
-      const { chatId, senderId, encryptedContent, type, ttl } = data;
+      const { chatId, senderId, encryptedContent, type, ttl, burnAfter, isAnonymous } = data;
       try {
-        const messageId = await db.saveMessage(chatId, senderId, encryptedContent, type, ttl);
+        const messageId = await db.saveMessage(chatId, senderId, encryptedContent, type, ttl, burnAfter || 0, isAnonymous || false);
         const sender = await db.getUserById(senderId);
         const messageData = {
           id: messageId,
@@ -563,6 +656,8 @@ async function startServer() {
           encryptedContent,
           type: type || 'normal',
           ttl: ttl || null,
+          burnAfter: burnAfter || 0,
+          isAnonymous: isAnonymous || false,
           isRecalled: false,
           createdAt: new Date().toISOString()
         };
@@ -618,6 +713,31 @@ async function startServer() {
       if (socket.userId) {
         onlineUsers.delete(socket.userId);
         io.emit('user-status', { userId: socket.userId, status: 'offline' });
+      }
+    });
+    
+    // 阅后即焚已读事件处理
+    socket.on('message-read', async (data) => {
+      const { messageId, chatId, userId } = data;
+      try {
+        await db.markMessageRead(chatId, userId, messageId);
+        const message = await db.getMessageById(messageId);
+        
+        if (message && message.burn_after > 0 && !message.burned_at) {
+          // 设置阅后即焚定时器
+          setTimeout(async () => {
+            try {
+              await db.markMessageBurned(messageId);
+              io.to(`chat-${chatId}`).emit('message-burned', { messageId, chatId });
+            } catch (err) {
+              console.error('销毁消息失败:', err);
+            }
+          }, message.burn_after * 1000);
+        }
+        
+        io.to(`chat-${chatId}`).emit('message-read-by', { messageId, userId });
+      } catch (error) {
+        console.error('消息已读处理失败:', error);
       }
     });
   });
