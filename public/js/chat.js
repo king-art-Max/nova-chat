@@ -2100,7 +2100,394 @@ Object.assign(Chat, {
         panel.classList.add('hidden');
       }
     });
+  },
+  
+  // ==================== 消息操作菜单 ====================
+  
+  /**
+   * 显示消息操作菜单
+   */
+  showMessageMenu(messageEl, message, isSent) {
+    // 关闭已存在的菜单
+    this.closeMessageMenu();
+    
+    // 获取消息内容用于后续操作
+    const content = this.getMessageContent(message);
+    if (!content) {
+      UI.showToast("无法获取消息内容");
+      return;
+    }
+    
+    // 构建菜单项
+    const menuItems = [
+      { icon: "📋", text: "复制", action: () => this.copyMessage(message, content) },
+      { icon: "💬", text: "引用回复", action: () => this.quoteReply(message, content) },
+      { icon: "🔄", text: "转发", action: () => this.forwardMessage(message, content) },
+      { icon: "🌐", text: "翻译", action: () => this.translateMessage(messageEl, message, content) },
+    ];
+    
+    // 只有发送者且2分钟内才能撤回
+    if (isSent) {
+      const messageTime = new Date(message.createdAt);
+      const now = new Date();
+      const diffMinutes = (now - messageTime) / 1000 / 60;
+      
+      if (diffMinutes <= 2) {
+        menuItems.push({ icon: "🗑️", text: "撤回", action: () => this.recallMessage(messageEl, message), danger: true });
+      }
+    }
+    
+    // 创建菜单
+    const menu = document.createElement("div");
+    menu.className = "message-action-menu";
+    menu.innerHTML = menuItems.map(item => {
+      return '<div class="menu-item ' + (item.danger ? "danger" : "") + '" data-action="' + item.text + '">' +
+        '<span class="menu-icon">' + item.icon + '</span>' +
+        '<span class="menu-text">' + item.text + '</span>' +
+      '</div>';
+    }).join("");
+    
+    // 绑定点击事件
+    menu.querySelectorAll(".menu-item").forEach((item, index) => {
+      item.addEventListener("click", () => {
+        menuItems[index].action();
+        this.closeMessageMenu();
+      });
+    });
+    
+    // 定位菜单
+    const rect = messageEl.getBoundingClientRect();
+    menu.style.position = "fixed";
+    menu.style.left = (rect.left + rect.width / 2) + "px";
+    menu.style.top = (rect.top - 10) + "px";
+    menu.style.transform = "translate(-50%, -100%)";
+    
+    // 存储当前菜单引用
+    this.currentMessageMenu = menu;
+    this.currentMessage = message;
+    this.currentMessageEl = messageEl;
+    
+    document.body.appendChild(menu);
+    
+    // 点击其他地方关闭菜单
+    setTimeout(() => {
+      document.addEventListener("click", this.boundCloseMenu);
+    }, 0);
+  },
+  
+  /**
+   * 关闭消息菜单
+   */
+  closeMessageMenu() {
+    if (this.currentMessageMenu) {
+      this.currentMessageMenu.remove();
+      this.currentMessageMenu = null;
+    }
+    document.removeEventListener("click", this.boundCloseMenu);
+  },
+  
+  /**
+   * 获取消息内容
+   */
+  getMessageContent(message) {
+    if (message.encryptedContent) {
+      try {
+        if (message.encryptedContent.includes(":") && !message.encryptedContent.startsWith("{")) {
+          const parts = message.encryptedContent.split(":");
+          if (parts.length >= 2) {
+            if (NovaCrypto && NovaCrypto.privateKey) {
+              const [iv, ciphertext, senderPublicKey] = parts;
+              try {
+                const senderKey = JSON.parse(senderPublicKey);
+                return NovaCrypto.decryptMessage(iv, ciphertext, senderKey);
+              } catch (e) {
+                return null;
+              }
+            }
+          }
+        } else if (message.encryptedContent.startsWith("{")) {
+          const parsed = JSON.parse(message.encryptedContent);
+          if (parsed.plain) return parsed.content;
+          if (parsed.type === "image") return "[图片]";
+        } else {
+          return message.encryptedContent;
+        }
+      } catch (e) {}
+    }
+    return null;
+  },
+  
+  /**
+   * 1. 复制消息
+   */
+  async copyMessage(message, content) {
+    try {
+      await navigator.clipboard.writeText(content);
+      UI.showToast("已复制到剪贴板");
+    } catch (error) {
+      console.error("复制失败:", error);
+      UI.showToast("复制失败，请重试");
+    }
+  },
+  
+  /**
+   * 2. 引用回复
+   */
+  quoteReply(message, content) {
+    this.quotedMessage = message;
+    this.showQuoteBar(message, content);
+    UI.showToast("点击发送回复引用");
+  },
+  
+  /**
+   * 显示引用条
+   */
+  showQuoteBar(message, content) {
+    this.cancelQuote();
+    
+    const senderName = message.nickname || (message.senderId === Auth.getCurrentUserId() ? "我" : "对方");
+    const previewContent = content.length > 50 ? content.substring(0, 50) + "..." : content;
+    
+    const quoteBar = document.createElement("div");
+    quoteBar.className = "quote-bar";
+    quoteBar.id = "quote-bar";
+    quoteBar.innerHTML = '<div class="quote-content">' +
+      '<span class="quote-label">回复 ' + senderName + '：</span>' +
+      '<span class="quote-text">' + UI.escapeHtml(previewContent) + '</span>' +
+    '</div>' +
+    '<button class="quote-cancel" id="btn-cancel-quote">✕</button>';
+    
+    quoteBar.querySelector("#btn-cancel-quote").addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.cancelQuote();
+    });
+    
+    const inputArea = document.querySelector(".chat-input-area");
+    const inputRow = document.querySelector(".input-row");
+    if (inputRow && inputArea) {
+      inputArea.insertBefore(quoteBar, inputRow);
+    }
+    
+    const input = document.getElementById("message-input");
+    if (input) input.focus();
+  },
+  
+  /**
+   * 取消引用
+   */
+  cancelQuote() {
+    const quoteBar = document.getElementById("quote-bar");
+    if (quoteBar) {
+      quoteBar.remove();
+    }
+    this.quotedMessage = null;
+  },
+  
+  /**
+   * 3. 转发消息
+   */
+  async forwardMessage(message, content) {
+    const chatList = this.chatMessages || {};
+    const chatIds = Object.keys(chatList);
+    
+    if (chatIds.length === 0) {
+      try {
+        const response = await fetch("/api/chats", {
+          headers: { "Authorization": "Bearer " + Auth.getToken() }
+        });
+        const data = await response.json();
+        
+        if (data.success && data.chats && data.chats.length > 0) {
+          this.showForwardModal(message, content, data.chats);
+        } else {
+          UI.showToast("暂无聊天可转发");
+        }
+      } catch (error) {
+        console.error("获取聊天列表失败:", error);
+        UI.showToast("获取聊天列表失败");
+      }
+      return;
+    }
+    
+    const chats = chatIds.map(id => {
+      const chat = this.chatMessages[id]?.chatInfo || { id, name: "聊天 " + id };
+      return chat;
+    });
+    
+    this.showForwardModal(message, content, chats);
+  },
+  
+  /**
+   * 显示转发选择弹窗
+   */
+  showForwardModal(message, content, chats) {
+    const chatOptions = chats.map(chat => {
+      const name = chat.name || chat.groupName || ("聊天 " + chat.id);
+      const avatar = chat.avatarEmoji || "💬";
+      return '<div class="forward-chat-item" data-chat-id="' + chat.id + '">' +
+        '<span class="forward-chat-avatar">' + avatar + '</span>' +
+        '<span class="forward-chat-name">' + name + '</span>' +
+      '</div>';
+    }).join("");
+    
+    UI.showModal("转发消息", '<div class="forward-modal">' +
+      '<div class="forward-preview">' + UI.escapeHtml(content.length > 100 ? content.substring(0, 100) + "..." : content) + '</div>' +
+      '<div class="forward-chat-list">' + chatOptions + '</div>' +
+    '</div>', [
+      { text: "取消", class: "btn-secondary" }
+    ]);
+    
+    document.querySelectorAll(".forward-chat-item").forEach(item => {
+      item.addEventListener("click", () => {
+        const chatId = parseInt(item.dataset.chatId);
+        this.forwardToChat(message, content, chatId);
+      });
+    });
+  },
+  
+  /**
+   * 执行转发到指定聊天
+   */
+  async forwardToChat(message, content, chatId) {
+    try {
+      const forwardMessage = {
+        chatId: chatId,
+        senderId: Auth.getCurrentUserId(),
+        encryptedContent: JSON.stringify({ plain: true, content }),
+        type: "forwarded",
+        originalMessageId: message.id
+      };
+      
+      if (window.socket && window.socket.connected) {
+        window.socket.emit("send-message", forwardMessage);
+        UI.showToast("消息已转发");
+      } else {
+        const response = await fetch("/api/chats/" + chatId + "/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + Auth.getToken()
+          },
+          body: JSON.stringify(forwardMessage)
+        });
+        
+        if (response.ok) {
+          UI.showToast("消息已转发");
+        } else {
+          UI.showToast("转发失败");
+        }
+      }
+    } catch (error) {
+      console.error("转发失败:", error);
+      UI.showToast("转发失败，请重试");
+    }
+  },
+  
+  /**
+   * 4. 翻译消息
+   */
+  async translateMessage(messageEl, message, content) {
+    const existingTranslation = messageEl.querySelector(".message-translation");
+    if (existingTranslation) {
+      existingTranslation.classList.toggle("visible");
+      return;
+    }
+    
+    const translationEl = document.createElement("div");
+    translationEl.className = "message-translation";
+    translationEl.innerHTML = '<span class="translating">🌐 翻译中...</span>';
+    messageEl.appendChild(translationEl);
+    translationEl.classList.add("visible");
+    
+    try {
+      const response = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: content,
+          from: "auto",
+          to: "zh"
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.translatedText) {
+        translationEl.innerHTML = '<span class="trans-label">🌐 翻译：</span>' + UI.escapeHtml(data.translatedText);
+      } else {
+        translationEl.innerHTML = '<span class="trans-error">翻译失败，请重试</span>';
+      }
+    } catch (error) {
+      console.error("翻译失败:", error);
+      translationEl.innerHTML = '<span class="trans-error">翻译请求失败</span>';
+    }
+  },
+  
+  /**
+   * 5. 撤回消息
+   */
+  async recallMessage(messageEl, message) {
+    const messageTime = new Date(message.createdAt);
+    const now = new Date();
+    const diffMinutes = (now - messageTime) / 1000 / 60;
+    
+    if (diffMinutes > 2) {
+      UI.showToast("消息已超过2分钟，无法撤回");
+      return;
+    }
+    
+    UI.showConfirm("撤回消息", "确定要撤回这条消息吗？", async () => {
+      try {
+        if (window.socket && window.socket.connected) {
+          window.socket.emit("recall-message", {
+            messageId: message.id,
+            chatId: this.currentChat?.id,
+            userId: Auth.getCurrentUserId()
+          });
+        } else {
+          const response = await fetch("/api/messages/" + message.id + "/recall", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + Auth.getToken()
+            },
+            body: JSON.stringify({
+              chatId: this.currentChat?.id,
+              userId: Auth.getCurrentUserId()
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error("撤回失败");
+          }
+        }
+        
+        const contentDiv = messageEl.querySelector(".message-content");
+        if (contentDiv) {
+          contentDiv.textContent = "此消息已撤回";
+          contentDiv.classList.add("recalled");
+        }
+        messageEl.dataset.recalled = "true";
+        
+        const translation = messageEl.querySelector(".message-translation");
+        if (translation) translation.remove();
+        
+        if (this.chatMessages[this.currentChat?.id]) {
+          const msgIndex = this.chatMessages[this.currentChat.id].findIndex(m => m.id === message.id);
+          if (msgIndex !== undefined && msgIndex >= 0) {
+            this.chatMessages[this.currentChat.id][msgIndex].isRecalled = true;
+            this.chatMessages[this.currentChat.id][msgIndex].encryptedContent = "[此消息已撤回]";
+          }
+        }
+        
+        UI.showToast("消息已撤回");
+      } catch (error) {
+        console.error("撤回失败:", error);
+        UI.showToast("撤回失败，请重试");
+      }
+    });
   }
+
 });
 
 // 绑定翻译按钮事件

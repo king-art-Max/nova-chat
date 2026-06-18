@@ -3572,3 +3572,131 @@ ul, ol {
   background: rgba(100, 100, 255, 0.1);
   border-radius: 8px;
 }
+
+/* ==================== 引用条样式 ==================== */
+.quote-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(100, 100, 255, 0.15), rgba(138, 43, 226, 0.1));
+  border-left: 3px solid rgba(100, 100, 255, 0.6);
+  border-radius: 0 8px 8px 0;
+  padding: 8px 12px;
+  margin: 0 8px 8px 8px;
+  font-size: 13px;
+  backdrop-filter: blur(10px);
+}
+
+.quote-bar .quote-content {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quote-bar .quote-label {
+  color: #8888ff;
+  font-weight: 500;
+}
+
+.quote-bar .quote-text {
+  color: #aaa;
+  margin-left: 6px;
+}
+
+.quote-bar .quote-cancel {
+  background: rgba(255, 100, 100, 0.2);
+  border: none;
+  color: #ff6b6b;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  margin-left: 10px;
+}
+
+.quote-bar .quote-cancel:hover {
+  background: rgba(255, 100, 100, 0.4);
+  transform: scale(1.1);
+}
+
+/* ==================== 转发弹窗样式 ==================== */
+.forward-modal {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.forward-preview {
+  background: rgba(100, 100, 255, 0.1);
+  border-left: 3px solid rgba(100, 100, 255, 0.5);
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+  color: #aaa;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.forward-chat-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.forward-chat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 4px;
+}
+
+.forward-chat-item:hover {
+  background: rgba(100, 100, 255, 0.15);
+}
+
+.forward-chat-item:active {
+  background: rgba(100, 100, 255, 0.25);
+}
+
+.forward-chat-avatar {
+  font-size: 28px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(100, 100, 255, 0.2);
+  border-radius: 50%;
+}
+
+.forward-chat-name {
+  font-size: 14px;
+  color: #e0e0e0;
+  flex: 1;
+}
+
+/* 翻译结果样式 */
+.message-translation .translating {
+  color: #8888ff;
+  animation: pulse 1s infinite;
+}
+
+.message-translation .trans-error {
+  color: #ff6b6b;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
