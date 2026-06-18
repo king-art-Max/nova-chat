@@ -94,15 +94,15 @@ const AIChat = {
     this.currentPersona = persona;
     
     // 初始化对话历史
-    if (!this.conversationHistory[persona.gal_number]) {
-      this.conversationHistory[persona.gal_number] = [];
+    if (!this.conversationHistory[persona.galNumber]) {
+      this.conversationHistory[persona.galNumber] = [];
     }
     
     // 显示AI聊天窗口
     UI.showAIChatWindow(persona.name);
     
     // 添加欢迎消息
-    if (this.conversationHistory[persona.gal_number].length === 0) {
+    if (this.conversationHistory[persona.galNumber].length === 0) {
       const welcomeMessages = {
         'AI-NOVA000001': '你好！我是Nova助手，有什么我可以帮你的吗？',
         'AI-TOXIC00002': '呵，又来一个找我聊天的。说吧，你想知道什么？',
@@ -110,7 +110,7 @@ const AIChat = {
         'AI-DATA000004': '你好，我是数据分析师。请提供你想要分析的问题。'
       };
       
-      const welcome = welcomeMessages[persona.gal_number] || '你好，有什么问题吗？';
+      const welcome = welcomeMessages[persona.galNumber] || '你好，有什么问题吗？';
       this.addAIMessage(welcome);
     } else {
       // 恢复对话历史
