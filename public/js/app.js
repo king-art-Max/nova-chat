@@ -434,19 +434,29 @@ const Contacts = {
    * 显示添加联系人模态框
    */
   showAddContactModal() {
-    UI.showInputModal(
-      '添加联系人',
-      '对方的Gal号码（如 GAL90IA56MH2）',
-      'GAL90IA56MH2',
-      async (galNumber) => {
-        let cleanGal = galNumber.trim().replace('Gal://', '').replace('gal://', '');
+    // 自定义模态框，防止点击确定后立即关闭
+    UI.showModal('添加联系人', `
+      <div class="form-group">
+        <label>对方的Gal号码</label>
+        <input type="text" id="add-contact-input" placeholder="GAL90IA56MH2" style="text-transform:uppercase;">
+      </div>
+      <p id="add-contact-hint" style="color:var(--text-muted);font-size:12px;margin-top:4px;"></p>
+    `, [
+      { text: '取消', class: 'btn-secondary' },
+      { text: '添加', class: 'btn-primary', closeOnClick: false, onClick: async () => {
+        const input = document.getElementById('add-contact-input');
+        const hint = document.getElementById('add-contact-hint');
+        let cleanGal = input.value.trim().replace('Gal://', '').replace('gal://', '').toUpperCase();
         
         if (!cleanGal.startsWith('GAL')) {
-          UI.showToast('请输入正确的Gal号码，如 GAL90IA56MH2');
+          hint.style.color = '#ff4444';
+          hint.textContent = '请输入正确的Gal号码，如 GAL90IA56MH2';
           return;
         }
         
-        UI.showToast('正在发送请求...');
+        hint.style.color = 'var(--text-muted)';
+        hint.textContent = '正在发送请求...';
+        input.disabled = true;
         
         try {
           const response = await fetch('/api/contacts/add', {
@@ -462,16 +472,26 @@ const Contacts = {
           
           if (data.success) {
             UI.showToast('好友请求已发送 ✨');
+            UI.closeModal();
             this.loadContacts();
           } else {
-            UI.showToast(data.error || '添加失败');
+            hint.style.color = '#ff4444';
+            hint.textContent = data.error || '添加失败';
+            input.disabled = false;
           }
         } catch (error) {
           console.error('添加联系人失败:', error);
-          UI.showToast('网络错误，请重试');
+          hint.style.color = '#ff4444';
+          hint.textContent = '网络错误，请重试';
+          input.disabled = false;
         }
-      }
-    );
+      }}
+    ]);
+    
+    setTimeout(() => {
+      const input = document.getElementById('add-contact-input');
+      if (input) input.focus();
+    }, 100);
   },
   
   /**
