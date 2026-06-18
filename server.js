@@ -101,7 +101,7 @@ async function startServer() {
 
   app.post('/api/login', async (req, res) => {
     const { account, password } = req.body;
-    console.log(`🔐 登录请求: account="${account}", dbMode=${process.env.DATABASE_URL ? "PostgreSQL" : "SQLite"});
+    console.log(`🔐 登录请求: account="${account}", dbMode=${process.env.DATABASE_URL ? "PostgreSQL" : "SQLite"}`);
     if (!account || !password) {
       return res.status(400).json({ success: false, error: '账号和密码不能为空' });
     }

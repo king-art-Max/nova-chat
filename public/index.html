@@ -227,34 +227,27 @@
             <!-- 功能列表 -->
             <div class="profile-menu">
               <div class="menu-group">
+                <div class="menu-item" id="btn-edit-profile">
+                  <span class="menu-icon">✏️</span><span class="menu-text">编辑资料</span><span class="menu-arrow">›</span>
+                </div>
                 <div class="menu-item" id="menu-security">
                   <span class="menu-icon">🔒</span><span class="menu-text">安全设置</span><span class="menu-arrow">›</span>
-                </div>
-                <div class="menu-item" id="menu-privacy">
-                  <span class="menu-icon">🛡️</span><span class="menu-text">隐私保护</span><span class="menu-arrow">›</span>
-                </div>
-                <div class="menu-item" id="menu-password">
-                  <span class="menu-icon">🔑</span><span class="menu-text">密码管理</span><span class="menu-arrow">›</span>
                 </div>
               </div>
               <div class="menu-group">
                 <div class="menu-item" id="menu-wallet">
-                  <span class="menu-icon">💰</span><span class="menu-text">我的钱包</span><span class="menu-badge" id="wallet-balance-badge">100 星币</span><span class="menu-arrow">›</span>
+                  <span class="menu-icon">💰</span><span class="menu-text">星币钱包</span><span class="menu-arrow">›</span>
                 </div>
-                <div class="menu-item" id="menu-redpacket-history">
-                  <span class="menu-icon">🧧</span><span class="menu-text">红包记录</span><span class="menu-arrow">›</span>
+                <div class="menu-item" id="menu-starred">
+                  <span class="menu-icon">❤️</span><span class="menu-text">我的收藏</span><span class="menu-arrow">›</span>
                 </div>
               </div>
               <div class="menu-group">
-                <div class="menu-item" id="menu-darkmode">
-                  <span class="menu-icon">🌙</span><span class="menu-text">深色模式</span>
-                  <label class="toggle-switch"><input type="checkbox" checked id="darkmode-toggle"><span class="toggle-slider"></span></label>
-                </div>
-                <div class="menu-item" id="menu-language">
-                  <span class="menu-icon">🌐</span><span class="menu-text">语言设置</span><span class="menu-value">中文</span><span class="menu-arrow">›</span>
+                <div class="menu-item" id="menu-clear-cache">
+                  <span class="menu-icon">🗑️</span><span class="menu-text">清除缓存</span><span class="menu-arrow">›</span>
                 </div>
                 <div class="menu-item" id="menu-about">
-                  <span class="menu-icon">📱</span><span class="menu-text">关于Nova-OS</span><span class="menu-value">v2.0</span><span class="menu-arrow">›</span>
+                  <span class="menu-icon">📱</span><span class="menu-text">关于Nova-OS</span><span class="menu-value">v3.0</span><span class="menu-arrow">›</span>
                 </div>
               </div>
               <div class="menu-group">
@@ -345,38 +338,46 @@
         </div>
         <!-- 表情面板 -->
         <div class="input-panel hidden" id="emoji-panel">
+          <div class="emoji-tabs" id="emoji-tabs"></div>
           <div class="emoji-grid" id="emoji-grid"></div>
         </div>
         <!-- 翻译面板 -->
         <div class="input-panel hidden" id="translate-panel">
-          <div class="translate-header">选择翻译语言</div>
-          <div class="lang-grid">
-            <button class="lang-btn selected" data-lang="zh-CN">🇨🇳 中文简体</button>
-            <button class="lang-btn" data-lang="zh-TW">🇨🇳 中文繁体</button>
-            <button class="lang-btn" data-lang="en-US">🇺🇸 English</button>
-            <button class="lang-btn" data-lang="en-GB">🇬🇧 English(UK)</button>
-            <button class="lang-btn" data-lang="ja">🇯🇵 日本語</button>
-            <button class="lang-btn" data-lang="ko">🇰🇷 한국어</button>
-            <button class="lang-btn" data-lang="fr">🇫🇷 Français</button>
-            <button class="lang-btn" data-lang="de">🇩🇪 Deutsch</button>
-            <button class="lang-btn" data-lang="es">🇪🇸 Español</button>
-            <button class="lang-btn" data-lang="it">🇮🇹 Italiano</button>
-            <button class="lang-btn" data-lang="ru">🇷🇺 Русский</button>
-            <button class="lang-btn" data-lang="ar">🇸🇦 العربية</button>
+          <div class="burn-title">选择目标语言</div>
+          <div class="translate-langs" id="translate-langs">
+            <button class="lang-btn" data-lang="zh">🇨🇳 中文</button>
+            <button class="lang-btn" data-lang="zh-TW">🇨🇳 繁体</button>
+            <button class="lang-btn selected" data-lang="en">🇺🇸 英语</button>
+            <button class="lang-btn" data-lang="en-GB">🇬🇧 英式</button>
+            <button class="lang-btn" data-lang="ja">🇯🇵 日语</button>
+            <button class="lang-btn" data-lang="ko">🇰🇷 韩语</button>
+            <button class="lang-btn" data-lang="fr">🇫🇷 法语</button>
+            <button class="lang-btn" data-lang="de">🇩🇪 德语</button>
+            <button class="lang-btn" data-lang="es">🇪🇸 西班牙语</button>
+            <button class="lang-btn" data-lang="it">🇮🇹 意大利语</button>
+            <button class="lang-btn" data-lang="ru">🇷🇺 俄语</button>
+            <button class="lang-btn" data-lang="ar">🇸🇦 阿拉伯语</button>
           </div>
-          <div class="auto-translate">
-            <span>自动翻译</span>
-            <label class="toggle-switch"><input type="checkbox" id="auto-translate-toggle"><span class="toggle-slider"></span></label>
+          <div class="translate-input-group">
+            <input type="text" id="translate-input" placeholder="输入要翻译的文字">
+            <button class="btn btn-primary btn-sm" id="btn-do-translate">翻译</button>
+          </div>
+          <div class="translate-result-group">
+            <label>翻译结果</label>
+            <input type="text" id="translate-result" readonly placeholder="翻译结果">
+          </div>
+          <div class="translate-actions">
+            <button class="btn btn-secondary" id="btn-insert-translation">插入到输入框</button>
           </div>
         </div>
         <!-- 阅后即焚面板 -->
         <div class="input-panel hidden" id="burn-panel">
-          <div class="burn-header">🔥 阅后即焚<span>消息将在对方阅读后自动销毁</span></div>
+          <div class="burn-title">🔥 阅后即焚 - 选择销毁时间</div>
           <div class="burn-options">
             <button class="burn-btn" data-seconds="5">5秒</button>
             <button class="burn-btn" data-seconds="10">10秒</button>
             <button class="burn-btn selected" data-seconds="30">30秒</button>
-            <button class="burn-btn" data-seconds="60">60秒</button>
+            <button class="burn-btn" data-seconds="60">1分钟</button>
           </div>
         </div>
         <!-- 匿踪提示 -->
