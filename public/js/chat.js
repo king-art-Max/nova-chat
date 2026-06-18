@@ -282,6 +282,10 @@ const Chat = {
       if (data.success) {
         const chatList = document.getElementById('chat-list');
         
+        // 分离置顶和非置顶聊天
+        const pinnedChats = data.chats.filter(chat => this.pinnedChats.includes(chat.id));
+        const normalChats = data.chats.filter(chat => !this.pinnedChats.includes(chat.id));
+        
         if (data.chats.length === 0) {
           chatList.innerHTML = `
             <div class="empty-state">
@@ -290,9 +294,25 @@ const Chat = {
             </div>
           `;
         } else {
-          chatList.innerHTML = data.chats.map(chat => 
-            UI.renderChatItem(chat, Auth.getCurrentUserId())
-          ).join('');
+          let html = '';
+          
+          // 渲染置顶聊天
+          if (pinnedChats.length > 0) {
+            html += '<div class="chat-section-header">📌 置顶聊天</div>';
+            pinnedChats.forEach(chat => {
+              html += UI.renderChatItem(chat, Auth.getCurrentUserId(), true);
+            });
+          }
+          
+          // 渲染普通聊天
+          if (normalChats.length > 0) {
+            html += '<div class="chat-section-header">💬 消息</div>';
+            normalChats.forEach(chat => {
+              html += UI.renderChatItem(chat, Auth.getCurrentUserId(), false);
+            });
+          }
+          
+          chatList.innerHTML = html;
           
           // 绑定点击事件
           chatList.querySelectorAll('.chat-item').forEach(item => {
@@ -301,14 +321,25 @@ const Chat = {
               this.openChat(chatId);
             });
             
-            // 长按查看详情
+            // 长按置顶/取消置顶
             let pressTimer;
             item.addEventListener('touchstart', () => {
               pressTimer = setTimeout(() => {
-                // 显示聊天详情
+                this.togglePinChat(item);
               }, 500);
             });
             item.addEventListener('touchend', () => {
+              clearTimeout(pressTimer);
+            });
+            item.addEventListener('mousedown', () => {
+              pressTimer = setTimeout(() => {
+                this.togglePinChat(item);
+              }, 500);
+            });
+            item.addEventListener('mouseup', () => {
+              clearTimeout(pressTimer);
+            });
+            item.addEventListener('mouseleave', () => {
               clearTimeout(pressTimer);
             });
           });
@@ -317,6 +348,25 @@ const Chat = {
     } catch (error) {
       console.error('加载聊天列表失败:', error);
     }
+  },
+  
+  /**
+   * 置顶/取消置顶聊天
+   */
+  togglePinChat(item) {
+    const chatId = parseInt(item.dataset.chatId);
+    const index = this.pinnedChats.indexOf(chatId);
+    
+    if (index > -1) {
+      this.pinnedChats.splice(index, 1);
+      UI.showToast('已取消置顶');
+    } else {
+      this.pinnedChats.unshift(chatId);
+      UI.showToast('已置顶聊天 📌');
+    }
+    
+    localStorage.setItem('nova_pinned_chats', JSON.stringify(this.pinnedChats));
+    this.loadChatList();
   },
   
   /**
@@ -627,16 +677,78 @@ const Chat = {
         const messagesEl = document.getElementById('chat-messages');
         messagesEl.innerHTML = '';
         
+        let lastDate = null;
+        
         for (const message of messages) {
+          // 检查是否需要添加日期分割线
+          const messageDate = new Date(message.createdAt || message.created_at).toDateString();
+          if (messageDate !== lastDate) {
+            this.addDateDivider(messagesEl, message.createdAt || message.created_at);
+            lastDate = messageDate;
+          }
+          
           await this.displayMessage(message, message.senderId === Auth.getCurrentUserId());
         }
         
         // 滚动到底部
-        messagesEl.scrollTop = messagesEl.scrollHeight;
+        this.scrollToBottom(false);
       }
     } catch (error) {
       console.error('加载消息失败:', error);
     }
+  },
+  
+  /**
+   * 添加日期分割线
+   */
+  addDateDivider(container, timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const today = now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    let dateText;
+    if (date.toDateString() === today) {
+      dateText = '今天';
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      dateText = '昨天';
+    } else {
+      const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+      if (diffDays < 7) {
+        const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        dateText = weekdays[date.getDay()];
+      } else {
+        dateText = `${date.getMonth() + 1}月${date.getDate()}日`;
+      }
+    }
+    
+    const divider = document.createElement('div');
+    divider.className = 'message-date-divider';
+    divider.innerHTML = `<span>${dateText}</span>`;
+    container.appendChild(divider);
+  },
+  
+  /**
+   * 检查消息时间间隔
+   */
+  shouldShowTimeDivider(currentMsg, prevMsg) {
+    if (!prevMsg) return false;
+    const currentTime = new Date(currentMsg.createdAt || currentMsg.created_at);
+    const prevTime = new Date(prevMsg.createdAt || prevMsg.created_at);
+    const diffMinutes = (currentTime - prevTime) / (1000 * 60);
+    return diffMinutes > 5;
+  },
+  
+  /**
+   * 添加时间分割线
+   */
+  addTimeDivider(container, timestamp) {
+    const divider = document.createElement('div');
+    divider.className = 'message-time-divider';
+    const time = new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    divider.innerHTML = `<span>${time}</span>`;
+    container.appendChild(divider);
   },
   
   /**
@@ -648,6 +760,26 @@ const Chat = {
     messageEl.className = `message ${isSent ? 'sent' : 'received'} ${message.type || ''}`;
     messageEl.dataset.messageId = message.id;
     messageEl.dataset.senderId = message.senderId;
+    
+    // 检查是否需要添加时间分割线
+    const messages = this.chatMessages[this.currentChat?.id] || [];
+    const msgIndex = messages.indexOf(message);
+    const prevMsg = msgIndex > 0 ? messages[msgIndex - 1] : null;
+    if (this.shouldShowTimeDivider(message, prevMsg)) {
+      this.addTimeDivider(messagesEl, message.createdAt || message.created_at);
+    }
+    
+    // 长按收藏消息
+    let msgPressTimer;
+    messageEl.addEventListener('touchstart', (e) => {
+      msgPressTimer = setTimeout(() => {
+        if (window.Collection && content) {
+          Collection.add(content, message.senderId === Auth.getCurrentUserId() ? '我' : '对方');
+        }
+      }, 600);
+    });
+    messageEl.addEventListener('touchend', () => clearTimeout(msgPressTimer));
+    messageEl.addEventListener('touchmove', () => clearTimeout(msgPressTimer));
     
     // 检查是否已撤回
     const isRecalled = message.isRecalled || message.encryptedContent === '[此消息已撤回]';
