@@ -236,7 +236,7 @@ const Chat = {
     this.chatMessages[chatId] = [];
     
     // 加入Socket房间
-    socket.emit('join-chat', chatId);
+    window.socket.emit('join-chat', chatId);
     
     // 加载历史消息
     await this.loadMessages(chatId);
@@ -388,7 +388,7 @@ const Chat = {
     
     // 标记已读
     if (!isSent && message.id) {
-      socket.emit('message-read', {
+      window.socket.emit('message-read', {
         messageId: message.id,
         chatId: this.currentChat?.id,
         userId: Auth.getCurrentUserId()
@@ -459,7 +459,29 @@ const Chat = {
       };
       
       // 通过Socket发送
-      socket.emit('send-message', message);
+      if (window.socket && window.socket.connected) {
+        window.window.socket.emit('send-message', message);
+      }
+      
+      // 立即在本地显示消息（不依赖服务器回传）
+      const localMessage = {
+        id: 'local-' + Date.now(),
+        chatId: message.chatId,
+        senderId: Auth.getCurrentUserId(),
+        galNumber: Auth.currentUser?.galNumber || '',
+        nickname: Auth.currentUser?.nickname || '',
+        encryptedContent: content,  // 显示原始文本
+        type: message.type,
+        ttl: message.ttl,
+        createdAt: new Date().toISOString()
+      };
+      this.displayMessage(localMessage, true);
+      
+      // 添加到本地缓存
+      if (!this.chatMessages[message.chatId]) {
+        this.chatMessages[message.chatId] = [];
+      }
+      this.chatMessages[message.chatId].push(localMessage);
       
       // 清空输入框
       input.value = '';
@@ -484,7 +506,7 @@ const Chat = {
   sendTypingStatus() {
     if (!this.currentChat) return;
     
-    socket.emit('typing', {
+    window.socket.emit('typing', {
       chatId: this.currentChat.id,
       userId: Auth.getCurrentUserId(),
       nickname: Auth.currentUser?.nickname
@@ -504,7 +526,7 @@ const Chat = {
     if (!this.currentChat) return;
     
     clearTimeout(this.typingTimers[this.currentChat.id]);
-    socket.emit('stop-typing', {
+    window.socket.emit('stop-typing', {
       chatId: this.currentChat.id,
       userId: Auth.getCurrentUserId()
     });
@@ -515,7 +537,7 @@ const Chat = {
    */
   closeChat() {
     if (this.currentChat) {
-      socket.emit('leave-chat', this.currentChat.id);
+      window.socket.emit('leave-chat', this.currentChat.id);
       this.sendStopTyping();
       this.currentChat = null;
     }
@@ -531,6 +553,24 @@ const Chat = {
       // 不在当前聊天，刷新列表
       this.loadChatList();
       return;
+    }
+    
+    // 检查是否已经本地显示过（避免重复）
+    const existingEl = document.querySelector(`[data-message-id="${message.id}"]`);
+    if (existingEl) return;
+    
+    // 检查是否是自己刚发的本地消息，用服务器ID替换
+    if (message.senderId === Auth.getCurrentUserId() && this.chatMessages[message.chatId]) {
+      const localMsg = this.chatMessages[message.chatId].find(m => 
+        m.id && m.id.startsWith('local-') && 
+        m.encryptedContent === message.encryptedContent
+      );
+      if (localMsg) {
+        const localEl = document.querySelector(`[data-message-id="${localMsg.id}"]`);
+        if (localEl) localEl.dataset.messageId = message.id;
+        localMsg.id = message.id;
+        return;
+      }
     }
     
     // 添加到本地缓存
@@ -563,37 +603,43 @@ const Chat = {
   }
 };
 
-// Socket.io 事件处理
-socket?.on('new-message', (message) => {
-  Chat.handleNewMessage(message);
-});
+// Socket.io 事件处理 - 延迟注册（等socket连接后）
+function registerSocketEvents() {
+  const s = window.socket;
+  if (!s) return;
+  
+  s.on('new-message', (message) => {
+    Chat.handleNewMessage(message);
+  });
 
-socket?.on('message-destroyed', (data) => {
-  Chat.handleMessageDestroyed(data.messageId);
-});
+  s.on('message-destroyed', (data) => {
+    Chat.handleMessageDestroyed(data.messageId);
+  });
 
-socket?.on('user-typing', (data) => {
-  if (Chat.currentChat && Chat.currentChat.id === data.chatId) {
-    const typingEl = document.getElementById('chat-typing');
-    typingEl.textContent = `${data.nickname} 正在输入...`;
-  }
-});
+  s.on('user-typing', (data) => {
+    if (Chat.currentChat && Chat.currentChat.id === data.chatId) {
+      const typingEl = document.getElementById('chat-typing');
+      typingEl.textContent = `${data.nickname} 正在输入...`;
+    }
+  });
 
-socket?.on('user-stop-typing', (data) => {
-  if (Chat.currentChat && Chat.currentChat.id === data.chatId) {
-    const typingEl = document.getElementById('chat-typing');
-    typingEl.textContent = '';
-  }
-});
+  s.on('user-stop-typing', (data) => {
+    if (Chat.currentChat && Chat.currentChat.id === data.chatId) {
+      const typingEl = document.getElementById('chat-typing');
+      typingEl.textContent = '';
+    }
+  });
 
-socket?.on('message-read-by', (data) => {
-  // 更新消息状态为已读
-  const messageEl = document.querySelector(`[data-message-id="${data.messageId}"] .message-status`);
-  if (messageEl) {
-    messageEl.textContent = '✓✓';
-    messageEl.classList.add('read');
-  }
-});
+  s.on('message-read-by', (data) => {
+    const messageEl = document.querySelector(`[data-message-id="${data.messageId}"] .message-status`);
+    if (messageEl) {
+      messageEl.textContent = '✓✓';
+      messageEl.classList.add('read');
+    }
+  });
+}
+
+window.registerSocketEvents = registerSocketEvents;
 
 // 导出聊天模块
 window.Chat = Chat;

@@ -33,6 +33,11 @@ function initSocket() {
   
   // 导出socket供其他模块使用
   window.socket = socket;
+  
+  // 注册chat模块的socket事件
+  if (window.registerSocketEvents) {
+    window.registerSocketEvents();
+  }
 }
 
 /**
