@@ -1578,13 +1578,14 @@ Object.assign(Chat, {
     const panel = document.getElementById('emoji-panel');
     if (!panel) return;
     
+    const wasOpen = !panel.classList.contains('hidden');
     this.closeAllPanels();
     
-    if (panel.classList.contains('hidden')) {
+    if (wasOpen) {
+      // 面板之前是打开的，关闭即可
+    } else {
       panel.classList.remove('hidden');
       this.renderEmojiPanel();
-    } else {
-      panel.classList.add('hidden');
     }
   },
   
