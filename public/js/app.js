@@ -212,7 +212,10 @@ const App = {
       rocket: '🚀',
       star: '⭐',
       moon: '🌙',
-      alien: '👽'
+      alien: '👽',
+      robot: '🤖',
+      devil: '😈',
+      heart: '💖'
     };
     avatarEl.innerHTML = `<span>${avatarEmojis[user.avatar] || '👨‍🚀'}</span>`;
     
@@ -246,19 +249,39 @@ const App = {
    * 显示设置
    */
   showSettings() {
-    UI.showModal('设置', `
-      <div class="settings-list">
-        <div class="setting-item">
-          <span>版本</span>
-          <span class="setting-value">Nova-OS v3.0</span>
+    UI.showModal('设置中心', `
+      <div class="settings-menu">
+        <div class="settings-menu-item" onclick="App.showEditProfile()">
+          <span class="settings-icon">👤</span>
+          <span class="settings-text">编辑资料</span>
+          <span class="settings-arrow">›</span>
         </div>
-        <div class="setting-item">
-          <span>加密方式</span>
-          <span class="setting-value">ECDH + AES-256-GCM</span>
+        <div class="settings-menu-item" onclick="App.showSecuritySettings()">
+          <span class="settings-icon">🔐</span>
+          <span class="settings-text">安全设置</span>
+          <span class="settings-arrow">›</span>
         </div>
-        <div class="setting-item">
-          <span>服务器状态</span>
-          <span class="setting-value" id="server-status">连接中...</span>
+        <div class="settings-menu-item" onclick="App.showStarWallet()">
+          <span class="settings-icon">💎</span>
+          <span class="settings-text">星币钱包</span>
+          <span class="settings-value">${localStorage.getItem('nova_star_coins') || 1000}</span>
+          <span class="settings-arrow">›</span>
+        </div>
+        <div class="settings-menu-item" onclick="App.showMyCollections()">
+          <span class="settings-icon">⭐</span>
+          <span class="settings-text">我的收藏</span>
+          <span class="settings-value" id="collection-count">${(JSON.parse(localStorage.getItem('nova_collections') || '[]')).length}</span>
+          <span class="settings-arrow">›</span>
+        </div>
+        <div class="settings-menu-item" onclick="App.showAbout()">
+          <span class="settings-icon">ℹ️</span>
+          <span class="settings-text">关于Nova-OS</span>
+          <span class="settings-arrow">›</span>
+        </div>
+        <div class="settings-menu-item danger" onclick="App.clearCache()">
+          <span class="settings-icon">🗑️</span>
+          <span class="settings-text">清除缓存</span>
+          <span class="settings-arrow">›</span>
         </div>
       </div>
     `, [
@@ -291,13 +314,16 @@ const App = {
   showEditProfile() {
     const user = Auth.currentUser;
     
-    const avatarOptions = ['astronaut', 'rocket', 'star', 'moon', 'alien'];
+    const avatarOptions = ['astronaut', 'rocket', 'star', 'moon', 'alien', 'robot', 'devil', 'heart'];
     const avatarEmojis = {
       astronaut: '👨‍🚀',
       rocket: '🚀',
       star: '⭐',
       moon: '🌙',
-      alien: '👽'
+      alien: '👽',
+      robot: '🤖',
+      devil: '😈',
+      heart: '💖'
     };
     
     UI.showModal('编辑资料', `
@@ -1598,8 +1624,29 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+// 收藏消息功能
+const Collection = {
+  add(content, from) {
+    let collections = JSON.parse(localStorage.getItem('nova_collections') || '[]');
+    collections.unshift({
+      content,
+      from,
+      time: new Date().toLocaleString('zh-CN')
+    });
+    
+    // 最多保存100条
+    if (collections.length > 100) {
+      collections = collections.slice(0, 100);
+    }
+    
+    localStorage.setItem('nova_collections', JSON.stringify(collections));
+    UI.showToast('已添加到收藏 ⭐');
+  }
+};
+
 // 导出新增模块
 window.MenuFunctions = MenuFunctions;
 window.GroupSettings = GroupSettings;
 window.SuperGroup = SuperGroup;
 window.AICompany = AICompany;
+window.Collection = Collection;

@@ -215,6 +215,62 @@ async function startServer() {
     }
   });
 
+
+  // 获取用户完整信息
+  app.get('/api/user/info/:id', async (req, res) => {
+    const userId = parseInt(req.params.id);
+    if (!userId) {
+      return res.status(400).json({ success: false, error: '缺少用户ID' });
+    }
+    try {
+      const user = await db.getUserFullInfo(userId);
+      if (user) {
+        res.json({
+          success: true,
+          user: {
+            id: user.id,
+            galNumber: user.gal_number,
+            email: user.email,
+            nickname: user.nickname,
+            avatar: user.avatar,
+            publicKey: user.public_key,
+            createdAt: user.created_at
+          }
+        });
+      } else {
+        res.status(404).json({ success: false, error: '用户不存在' });
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+
+  // 修改密码
+  app.put('/api/user/password', async (req, res) => {
+    const { userId, oldPassword, newPassword } = req.body;
+    if (!userId || !oldPassword || !newPassword) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, error: '新密码至少6位' });
+    }
+    try {
+      const isValid = await db.verifyPassword(userId, oldPassword);
+      if (!isValid) {
+        return res.status(401).json({ success: false, error: '旧密码错误' });
+      }
+      const success = await db.updateUserPassword(userId, newPassword);
+      if (success) {
+        res.json({ success: true, message: '密码修改成功' });
+      } else {
+        res.status(500).json({ success: false, error: '密码修改失败' });
+      }
+    } catch (error) {
+      console.error('修改密码错误:', error);
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+
   app.get('/api/contacts', async (req, res) => {
     const userId = parseInt(req.query.userId);
     if (!userId) {

@@ -4072,3 +4072,610 @@ ul, ol {
     font-size: 12px;
   }
 }
+
+/* ==================== 设置菜单样式 ==================== */
+.settings-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.settings-menu-item:hover {
+  background: var(--bg-card);
+}
+
+.settings-menu-item.danger {
+  color: var(--accent-pink);
+}
+
+.settings-icon {
+  font-size: 20px;
+  margin-right: 12px;
+}
+
+.settings-text {
+  flex: 1;
+  font-weight: 500;
+}
+
+.settings-value {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  margin-right: 8px;
+}
+
+.settings-arrow {
+  font-size: 18px;
+  color: var(--text-muted);
+}
+
+/* ==================== 安全设置样式 ==================== */
+.security-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.security-header {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.security-icon {
+  font-size: 28px;
+  margin-right: 12px;
+}
+
+.security-info {
+  flex: 1;
+}
+
+.security-title {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.security-desc {
+  display: block;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.security-status {
+  font-size: var(--font-sm);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.security-status.active {
+  color: var(--accent-green);
+}
+
+.security-item {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.security-item:hover {
+  background: var(--bg-card);
+}
+
+.security-item-icon {
+  font-size: 20px;
+  margin-right: 12px;
+}
+
+.security-item-info {
+  flex: 1;
+}
+
+.security-item-title {
+  display: block;
+  font-weight: 500;
+}
+
+.security-item-desc {
+  display: block;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.device-current {
+  font-size: var(--font-xs);
+  color: var(--accent-blue);
+  background: rgba(0, 212, 255, 0.1);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.security-select {
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+/* ==================== 星币钱包样式 ==================== */
+.star-wallet {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.star-balance-card {
+  display: flex;
+  align-items: center;
+  padding: 20px;
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+  border-radius: var(--radius-lg);
+  color: white;
+}
+
+.star-icon {
+  font-size: 48px;
+  margin-right: 16px;
+}
+
+.star-balance {
+  display: flex;
+  flex-direction: column;
+}
+
+.balance-label {
+  font-size: var(--font-sm);
+  opacity: 0.9;
+}
+
+.balance-amount {
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.star-packages h4,
+.star-transactions h4 {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.package-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.package-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.package-item:hover {
+  border-color: var(--accent-blue);
+  transform: translateY(-2px);
+}
+
+.package-item.popular {
+  border-color: var(--accent-purple);
+  background: rgba(123, 47, 247, 0.1);
+}
+
+.popular-tag {
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  padding: 2px 6px;
+  background: var(--accent-purple);
+  color: white;
+  font-size: 10px;
+  border-radius: var(--radius-sm);
+}
+
+.package-amount {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent-blue);
+}
+
+.package-label {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.transaction-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.transaction-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.tx-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  font-weight: 700;
+  margin-right: 12px;
+}
+
+.tx-icon.plus {
+  background: rgba(0, 255, 136, 0.2);
+  color: var(--accent-green);
+}
+
+.tx-icon.minus {
+  background: rgba(255, 51, 102, 0.2);
+  color: var(--accent-pink);
+}
+
+.tx-info {
+  flex: 1;
+}
+
+.tx-info .tx-title {
+  display: block;
+  font-weight: 500;
+}
+
+.tx-info .tx-time {
+  display: block;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.tx-amount {
+  font-weight: 600;
+  color: var(--accent-pink);
+}
+
+.tx-amount.plus {
+  color: var(--accent-green);
+}
+
+.empty-tx {
+  text-align: center;
+  color: var(--text-muted);
+  padding: var(--space-lg);
+}
+
+/* ==================== 收藏列表样式 ==================== */
+.collections-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.collection-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.collection-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.collection-from {
+  display: block;
+  font-size: var(--font-xs);
+  color: var(--accent-blue);
+  font-weight: 500;
+}
+
+.collection-text {
+  display: block;
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+  margin: 4px 0;
+  word-break: break-word;
+}
+
+.collection-time {
+  display: block;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.btn-delete-collection {
+  padding: 8px;
+  font-size: 16px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.btn-delete-collection:hover {
+  opacity: 1;
+}
+
+.empty-collections {
+  text-align: center;
+  padding: var(--space-xl);
+}
+
+.empty-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: var(--space-md);
+}
+
+.empty-collections .empty-hint {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+/* ==================== 关于页面样式 ==================== */
+.about-content {
+  text-align: center;
+}
+
+.about-logo {
+  margin-bottom: var(--space-md);
+}
+
+.about-title {
+  font-size: 24px;
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.about-version {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.about-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.about-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.about-label {
+  color: var(--text-muted);
+}
+
+.about-value {
+  color: var(--accent-blue);
+  font-family: monospace;
+}
+
+.about-desc {
+  margin-bottom: var(--space-lg);
+}
+
+.about-desc p {
+  margin-bottom: var(--space-sm);
+  color: var(--text-secondary);
+}
+
+.about-team {
+  font-size: var(--font-sm);
+  color: var(--text-muted) !important;
+}
+
+.about-tech {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+.tech-tag {
+  padding: 4px 10px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-full);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+/* ==================== 清除缓存确认 ==================== */
+.clear-cache-confirm {
+  text-align: center;
+  padding: var(--space-md);
+}
+
+.cache-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: var(--space-md);
+}
+
+.cache-hint {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  margin-top: var(--space-sm);
+}
+
+/* ==================== 消息日期分割线 ==================== */
+.message-date-divider {
+  text-align: center;
+  margin: var(--space-md) 0;
+}
+
+.message-date-divider span {
+  display: inline-block;
+  padding: 4px 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-full);
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+/* ==================== 消息时间分割线 ==================== */
+.message-time-divider {
+  text-align: center;
+  margin: var(--space-xs) 0;
+}
+
+.message-time-divider span {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+/* ==================== 滚动到底部按钮 ==================== */
+.scroll-to-bottom {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--accent-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s;
+  z-index: 10;
+  cursor: pointer;
+}
+
+.scroll-to-bottom.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.scroll-to-bottom:hover {
+  background: var(--accent-blue);
+  color: white;
+}
+
+/* ==================== 置顶聊天样式 ==================== */
+.chat-item.pinned {
+  border-left: 3px solid var(--accent-blue);
+}
+
+.pin-indicator {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  font-size: 12px;
+}
+
+.chat-section-header {
+  padding: 8px 16px;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+}
+
+/* ==================== 聊天搜索样式 ==================== */
+.chat-search-container {
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+}
+
+.chat-search-box {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.chat-search-box .search-icon {
+  color: var(--text-muted);
+  margin-right: 8px;
+}
+
+.chat-search-box input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+}
+
+.chat-search-box input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ==================== 在线状态指示器 ==================== */
+.avatar.online {
+  position: relative;
+}
+
+.avatar.online::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background: var(--accent-green);
+  border: 2px solid var(--bg-primary);
+  border-radius: 50%;
+}
+
+/* ==================== 聊天输入提示 ==================== */
+.chat-typing {
+  height: 24px;
+  padding: 0 var(--space-md);
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.chat-typing:empty {
+  display: none;
+}

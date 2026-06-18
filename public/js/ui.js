@@ -321,7 +321,7 @@ const UI = {
   /**
    * 渲染聊天列表项
    */
-  renderChatItem(chat, currentUserId) {
+  renderChatItem(chat, currentUserId, isPinned = false) {
     const otherMember = chat.members?.find(m => m.id !== currentUserId);
     const name = chat.type === 'group' ? chat.name : (otherMember?.nickname || '未知用户');
     const avatar = otherMember?.avatar || (chat.type === 'group' ? 'star' : 'astronaut');

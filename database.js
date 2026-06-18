@@ -564,6 +564,47 @@ async function updateUser(userId, data) {
   return result.changes > 0;
 }
 
+
+// ==================== 密码修改与验证 ====================
+
+async function updateUserPassword(userId, newPassword) {
+  const bcrypt = require('bcryptjs');
+  const passwordHash = bcrypt.hashSync(newPassword, 10);
+  if (isPostgres) {
+    const result = await pgRunSql('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
+    return result.rowCount > 0;
+  } else {
+    const result = await runSql('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, userId]);
+    return result.changes > 0;
+  }
+}
+
+async function verifyPassword(userId, password) {
+  const bcrypt = require('bcryptjs');
+  let user;
+  if (isPostgres) {
+    user = await pgQueryOne('SELECT password_hash FROM users WHERE id = $1', [userId]);
+  } else {
+    user = await queryOne('SELECT password_hash FROM users WHERE id = ?', [userId]);
+  }
+  if (!user) return false;
+  return bcrypt.compareSync(password, user.password_hash);
+}
+
+async function getUserFullInfo(userId) {
+  if (isPostgres) {
+    return await pgQueryOne(
+      'SELECT id, gal_number, email, nickname, avatar, public_key, created_at FROM users WHERE id = $1',
+      [userId]
+    );
+  } else {
+    return await queryOne(
+      'SELECT id, gal_number, email, nickname, avatar, public_key, created_at FROM users WHERE id = ?',
+      [userId]
+    );
+  }
+}
+
 // ==================== 密码重置操作 ====================
 
 async function createPasswordReset(email) {
@@ -926,6 +967,9 @@ module.exports = {
   getUserById,
   getUserByGalNumber,
   updateUser,
+  updateUserPassword,
+  verifyPassword,
+  getUserFullInfo,
   getContacts,
   addContact,
   acceptContact,

@@ -14,6 +14,9 @@ const Chat = {
    * 初始化聊天模块
    */
   init() {
+    // 加载置顶聊天
+    this.pinnedChats = JSON.parse(localStorage.getItem('nova_pinned_chats') || '[]');
+    
     // 绑定事件
     this.bindEvents();
     
@@ -145,6 +148,54 @@ const Chat = {
     const voiceTimer = document.getElementById('voice-timer');
     if (voiceTimer) {
       voiceTimer.addEventListener('click', () => this.stopRecording());
+    }
+    
+    // 滚动到底部按钮
+    document.getElementById('btn-scroll-bottom')?.addEventListener('click', () => {
+      this.scrollToBottom();
+    });
+    
+    // 监听聊天消息滚动
+    const messagesEl = document.getElementById('chat-messages');
+    if (messagesEl) {
+      messagesEl.addEventListener('scroll', () => {
+        this.handleMessagesScroll();
+      });
+    }
+  },
+  
+  /**
+   * 处理消息滚动
+   */
+  handleMessagesScroll() {
+    const messagesEl = document.getElementById('chat-messages');
+    const scrollBtn = document.getElementById('btn-scroll-bottom');
+    
+    if (!messagesEl || !scrollBtn) return;
+    
+    const distanceFromBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+    
+    if (distanceFromBottom > 100) {
+      scrollBtn.classList.add('visible');
+    } else {
+      scrollBtn.classList.remove('visible');
+    }
+  },
+  
+  /**
+   * 滚动到底部
+   */
+  scrollToBottom(animate = true) {
+    const messagesEl = document.getElementById('chat-messages');
+    if (!messagesEl) return;
+    
+    if (animate) {
+      messagesEl.scrollTo({
+        top: messagesEl.scrollHeight,
+        behavior: 'smooth'
+      });
+    } else {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
     }
   },
   
