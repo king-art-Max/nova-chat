@@ -145,6 +145,16 @@ async function initPostgres() {
 
   await initAIPersonas();
   console.log('✅ PostgreSQL数据库初始化完成');
+
+  // 保活：每5分钟ping一次，防止Neon数据库休眠
+  setInterval(async () => {
+    try {
+      await pool.query("SELECT 1");
+      console.log("💚 PostgreSQL保活ping成功");
+    } catch (err) {
+      console.error("❌ PostgreSQL保活ping失败:", err.message);
+    }
+  }, 5 * 60 * 1000);
 }
 
 // PostgreSQL 查询辅助
@@ -460,7 +470,7 @@ async function registerUser(nickname, password, publicKey, email) {
     if (!emailRegex.test(email)) {
       return { success: false, error: '邮箱格式不正确' };
     }
-    const existing = await queryOne('SELECT id FROM users WHERE email = ?', [email]);
+    const existing = await queryOne('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', [email]);
     if (existing) {
       return { success: false, error: '该邮箱已被注册' };
     }
@@ -490,7 +500,7 @@ async function loginUser(account, password) {
   let user;
   if (account.includes('@')) {
     user = await queryOne(
-      'SELECT id, gal_number, email, nickname, avatar, public_key, password_hash FROM users WHERE email = ?',
+      'SELECT id, gal_number, email, nickname, avatar, public_key, password_hash FROM users WHERE LOWER(email) = LOWER(?)',
       [account]
     );
   } else {
@@ -603,7 +613,7 @@ async function resetPassword(email, newPassword) {
 }
 
 async function getUserByEmail(email) {
-  return await queryOne('SELECT id FROM users WHERE email = ?', [email]);
+  return await queryOne('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', [email]);
 }
 
 // ==================== 联系人操作 ====================
