@@ -692,7 +692,12 @@ const Chat = {
     }
     
     if (isSent) {
-      messageHTML += `<div class="message-status">✓</div>`;
+      const status = this.messageStatus[message.id] || 'sent';
+      let statusIcon = '✓';
+      let statusClass = 'msg-sent';
+      if (status === 'delivered') { statusIcon = '✓✓'; statusClass = 'msg-delivered'; }
+      if (status === 'read') { statusIcon = '✓✓'; statusClass = 'msg-read'; }
+      messageHTML += `<div class="message-status ${statusClass}">${statusIcon}</div>`;
     }
     
     messageEl.innerHTML = messageHTML;
@@ -920,6 +925,8 @@ const Chat = {
       }
       
       // 通过Socket发送
+      const tempId = 'local-' + Date.now();
+      message.tempId = tempId;
       if (window.socket && window.socket.connected) {
         window.socket.emit('send-message', message);
       } else {
@@ -1332,6 +1339,8 @@ const Chat = {
       }
       
       // 通过Socket发送
+      const tempId = 'local-' + Date.now();
+      message.tempId = tempId;
       if (window.socket && window.socket.connected) {
         window.socket.emit('send-message', message);
       } else {
@@ -1350,7 +1359,7 @@ const Chat = {
       
       // 立即在本地显示消息
       const localMessage = {
-        id: 'local-' + Date.now(),
+        id: tempId,
         chatId: message.chatId,
         senderId: Auth.getCurrentUserId(),
         galNumber: Auth.currentUser?.galNumber || '',
@@ -1362,6 +1371,8 @@ const Chat = {
         isAnonymous: message.isAnonymous,
         createdAt: new Date().toISOString()
       };
+      // 标记消息状态为"已发送"
+      this.messageStatus[tempId] = 'sent';
       this.displayMessage(localMessage, true);
       
       if (!this.chatMessages[message.chatId]) {
@@ -1418,11 +1429,76 @@ const Chat = {
   /**
    * 关闭聊天窗口
    */
-  closeChat() {
+  /**
+   * 显示新消息通知
+   */
+  showNotification(senderName, message) {
+    // 解析消息内容用于预览
+    let preview = '新消息';
+    try {
+      if (message.encryptedContent) {
+        const parsed = JSON.parse(message.encryptedContent);
+        if (parsed.plain && parsed.content) preview = parsed.content;
+        else if (parsed.type === 'image') preview = '[图片]';
+        else preview = '[加密消息]';
+      }
+    } catch(e) {
+      if (message.encryptedContent && !message.encryptedContent.includes(':')) {
+        preview = message.encryptedContent.substring(0, 20);
+      }
+    }
+    UI.showToast(`${senderName}: ${preview}`);
+  },
+  
+  /**
+   * 播放消息提示音
+   */
+  playNotificationSound() {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      gainNode.gain.value = 0.1;
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.15);
+    } catch(e) {}
+  },
+  
+  /**
+   * 更新聊天列表未读标记
+   */
+  updateChatListBadge(chatId) {
+    const chatItem = document.querySelector(`.chat-item[data-chat-id="${chatId}"]`);
+    if (!chatItem) return;
+    const count = this.unreadCounts[chatId] || 0;
+    let badge = chatItem.querySelector('.chat-item-badge');
+    if (count > 0) {
+      if (!badge) {
+        const meta = chatItem.querySelector('.chat-item-meta');
+        if (meta) {
+          badge = document.createElement('span');
+          badge.className = 'chat-item-badge';
+          meta.appendChild(badge);
+        }
+      }
+      if (badge) badge.textContent = count > 99 ? '99+' : count;
+    } else if (badge) {
+      badge.remove();
+    }
+  },
+  
+    closeChat() {
     if (this.isRecording) this.stopRecording();
     if (this.currentChat) {
-      window.socket.emit('leave-chat', this.currentChat.id);
+      // 不再leave-chat房间，保持接收消息
       this.sendStopTyping();
+      // 清除当前聊天未读数
+      this.unreadCounts[this.currentChat.id] = 0;
+      this.updateChatListBadge(this.currentChat.id);
       this.currentChat = null;
     }
     UI.hideChatWindow();
@@ -1433,7 +1509,20 @@ const Chat = {
    */
   handleNewMessage(message) {
     if (!this.currentChat || this.currentChat.id !== message.chatId) {
-      // 不在当前聊天，刷新列表
+      // 不在当前聊天 - 显示通知并增加未读计数
+      if (message.senderId !== Auth.getCurrentUserId()) {
+        // 增加未读计数
+        if (!this.unreadCounts[message.chatId]) this.unreadCounts[message.chatId] = 0;
+        this.unreadCounts[message.chatId]++;
+        // 更新聊天列表未读标记
+        this.updateChatListBadge(message.chatId);
+        // 显示通知提示
+        const senderName = message.nickname || message.galNumber || '未知用户';
+        this.showNotification(senderName, message);
+        // 播放提示音
+        this.playNotificationSound();
+      }
+      // 刷新列表
       this.loadChatList();
       return;
     }
@@ -1450,7 +1539,18 @@ const Chat = {
       );
       if (localMsg) {
         const localEl = document.querySelector(`[data-message-id="${localMsg.id}"]`);
-        if (localEl) localEl.dataset.messageId = message.id;
+        if (localEl) {
+          localEl.dataset.messageId = message.id;
+          // 更新消息状态为"已送达"
+          const statusEl = localEl.querySelector('.message-status');
+          if (statusEl) {
+            statusEl.textContent = '✓✓';
+            statusEl.className = 'message-status msg-delivered';
+          }
+        }
+        // 转移消息状态
+        this.messageStatus[message.id] = 'delivered';
+        delete this.messageStatus[localMsg.id];
         localMsg.id = message.id;
         return;
       }
@@ -1547,7 +1647,33 @@ function registerSocketEvents() {
   s.on('message-read-by', (data) => {
     Chat.handleMessageRead(data);
     const messageEl = document.querySelector('[data-message-id="' + data.messageId + '"] .message-status');
-    if (messageEl) { messageEl.textContent = '✓✓'; messageEl.classList.add('read'); }
+    if (messageEl) {
+      messageEl.textContent = '✓✓';
+      messageEl.className = 'message-status msg-read';
+    }
+    // 更新消息状态缓存
+    Chat.messageStatus[data.messageId] = 'read';
+  });
+  
+  // 消息送达服务器确认
+  s.on('message-sent', (data) => {
+    const { tempId, messageId, createdAt } = data;
+    if (tempId && Chat.messageStatus[tempId] === 'sent') {
+      Chat.messageStatus[tempId] = 'delivered';
+      // 更新本地消息的DOM状态
+      const localEl = document.querySelector(`[data-message-id="${tempId}"]`);
+      if (localEl) {
+        localEl.dataset.messageId = messageId;
+        const statusEl = localEl.querySelector('.message-status');
+        if (statusEl) {
+          statusEl.textContent = '✓✓';
+          statusEl.className = 'message-status msg-delivered';
+        }
+      }
+      // 转移状态缓存
+      Chat.messageStatus[messageId] = 'delivered';
+      delete Chat.messageStatus[tempId];
+    }
   });
   s.on('message-burned', (data) => { Chat.handleMessageBurned(data); });
 }

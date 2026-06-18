@@ -295,6 +295,9 @@ async function startServer() {
       const enrichedChats = [];
       for (const chat of chats) {
         const members = await db.getChatMembers(chat.id);
+        // 获取最后一条消息和未读数
+        const lastMsg = await db.getLastMessage(chat.id);
+        const unreadCount = await db.getUnreadCount(chat.id, userId);
         enrichedChats.push({
           ...chat,
           members: members.map(m => ({
@@ -303,7 +306,14 @@ async function startServer() {
             nickname: m.nickname,
             avatar: m.avatar,
             publicKey: m.public_key
-          }))
+          })),
+          lastMessage: lastMsg ? {
+            content: lastMsg.encrypted_content,
+            type: lastMsg.type,
+            senderId: lastMsg.sender_id,
+            createdAt: lastMsg.created_at
+          } : null,
+          unreadCount: unreadCount
         });
       }
       res.json({ success: true, chats: enrichedChats });
@@ -740,10 +750,21 @@ ${text}` }
   io.on('connection', (socket) => {
     console.log('🔌 用户连接:', socket.id);
     
-    socket.on('user-online', (userId) => {
+    socket.on('user-online', async (userId) => {
       onlineUsers.set(userId, socket.id);
       socket.userId = userId;
       io.emit('user-status', { userId, status: 'online' });
+      
+      // 自动加入该用户所有聊天房间，确保任何页面都能收到消息
+      try {
+        const chats = await db.getChats(userId);
+        for (const chat of chats) {
+          socket.join(`chat-${chat.id}`);
+        }
+        console.log(`✅ 用户${userId}已加入${chats.length}个聊天房间`);
+      } catch (err) {
+        console.error('加入聊天房间失败:', err);
+      }
     });
     
     socket.on('join-chat', (chatId) => {
@@ -751,7 +772,8 @@ ${text}` }
     });
     
     socket.on('leave-chat', (chatId) => {
-      socket.leave(`chat-${chatId}`);
+      // 不再离开房间，保持连接以持续接收消息推送
+      // socket.leave(`chat-${chatId}`);
     });
     
     socket.on('send-message', async (data) => {
@@ -774,7 +796,10 @@ ${text}` }
           isRecalled: false,
           createdAt: new Date().toISOString()
         };
+        // 向聊天室所有人广播新消息
         io.to(`chat-${chatId}`).emit('new-message', messageData);
+        // 向发送者确认消息已送达服务器
+        socket.emit('message-sent', { tempId: data.tempId, messageId: messageId, createdAt: messageData.createdAt });
         if (type === 'self-destruct' && ttl) {
           setTimeout(async () => {
             await db.deleteMessage(messageId);
@@ -799,8 +824,25 @@ ${text}` }
     
     socket.on('message-read', async (data) => {
       const { messageId, chatId, userId } = data;
-      await db.markMessageRead(chatId, userId, messageId);
-      io.to(`chat-${chatId}`).emit('message-read-by', { messageId, userId });
+      try {
+        await db.markMessageRead(chatId, userId, messageId);
+        const message = await db.getMessageById(messageId);
+        
+        if (message && message.burn_after > 0 && !message.burned_at) {
+          setTimeout(async () => {
+            try {
+              await db.markMessageBurned(messageId);
+              io.to(`chat-${chatId}`).emit('message-burned', { messageId, chatId });
+            } catch (err) {
+              console.error('销毁消息失败:', err);
+            }
+          }, message.burn_after * 1000);
+        }
+        
+        io.to(`chat-${chatId}`).emit('message-read-by', { messageId, userId });
+      } catch (error) {
+        console.error('消息已读处理失败:', error);
+      }
     });
     
     socket.on('recall-message', async (data) => {
@@ -829,30 +871,7 @@ ${text}` }
       }
     });
     
-    // 阅后即焚已读事件处理
-    socket.on('message-read', async (data) => {
-      const { messageId, chatId, userId } = data;
-      try {
-        await db.markMessageRead(chatId, userId, messageId);
-        const message = await db.getMessageById(messageId);
-        
-        if (message && message.burn_after > 0 && !message.burned_at) {
-          // 设置阅后即焚定时器
-          setTimeout(async () => {
-            try {
-              await db.markMessageBurned(messageId);
-              io.to(`chat-${chatId}`).emit('message-burned', { messageId, chatId });
-            } catch (err) {
-              console.error('销毁消息失败:', err);
-            }
-          }, message.burn_after * 1000);
-        }
-        
-        io.to(`chat-${chatId}`).emit('message-read-by', { messageId, userId });
-      } catch (error) {
-        console.error('消息已读处理失败:', error);
-      }
-    });
+
   });
 
   // 数据库状态接口

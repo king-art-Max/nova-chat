@@ -976,12 +976,30 @@ ul, ol {
   display: flex;
   justify-content: flex-end;
   margin-top: var(--space-xs);
-  color: rgba(255, 255, 255, 0.7);
   font-size: var(--font-xs);
+  font-weight: 500;
+  letter-spacing: -1px;
+  transition: all 0.2s ease;
 }
 
+/* 已发送：单灰色勾 */
+.message-status.msg-sent {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* 已送达：双灰色勾 */
+.message-status.msg-delivered {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* 已读：双蓝色勾 */
+.message-status.msg-read {
+  color: #4fc3f7;
+}
+
+/* 旧兼容 */
 .message-status.read {
-  color: var(--accent-blue);
+  color: #4fc3f7;
 }
 
 .message.self-destruct {

@@ -732,6 +732,29 @@ async function getChatMembers(chatId) {
   );
 }
 
+
+// ==================== 消息辅助查询 ====================
+
+async function getLastMessage(chatId) {
+  return await queryOne(
+    `SELECT id, sender_id, encrypted_content, type, created_at 
+     FROM messages 
+     WHERE chat_id = ? AND is_recalled = false
+     ORDER BY created_at DESC LIMIT 1`,
+    [chatId]
+  );
+}
+
+async function getUnreadCount(chatId, userId) {
+  const result = await queryOne(
+    `SELECT COUNT(*) as count FROM messages 
+     WHERE chat_id = ? AND sender_id != ? AND is_recalled = false
+     AND (read_by IS NULL OR read_by = '[]' OR NOT read_by LIKE ?)`,
+    [chatId, userId, `%"${userId}"%`]
+  );
+  return result ? (result.count || 0) : 0;
+}
+
 // ==================== 消息操作 ====================
 
 async function saveMessage(chatId, senderId, encryptedContent, type = 'normal', ttl = null, burnAfter = 0, isAnonymous = false) {
@@ -912,6 +935,8 @@ module.exports = {
   createGroupChat,
   addChatMember,
   getChatMembers,
+  getLastMessage,
+  getUnreadCount,
   saveMessage,
   getMessages,
   deleteMessage,

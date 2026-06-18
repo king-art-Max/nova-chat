@@ -327,16 +327,42 @@ const UI = {
     const avatar = otherMember?.avatar || (chat.type === 'group' ? 'star' : 'astronaut');
     const isOnline = otherMember && onlineUsers.has(otherMember.id);
     
+    // 最后一条消息预览
+    let preview = chat.type === 'group' ? '群聊' : '点击开始聊天';
+    if (chat.lastMessage) {
+      try {
+        const parsed = JSON.parse(chat.lastMessage.content);
+        if (parsed.plain && parsed.content) {
+          preview = parsed.content.substring(0, 30);
+          if (parsed.content.length > 30) preview += '...';
+        } else if (parsed.type === 'image') {
+          preview = '[图片]';
+        } else {
+          preview = '[加密消息]';
+        }
+      } catch(e) {
+        if (chat.lastMessage.content && !chat.lastMessage.content.includes(':')) {
+          preview = chat.lastMessage.content.substring(0, 30);
+        } else {
+          preview = '[加密消息]';
+        }
+      }
+    }
+    
+    // 未读计数
+    const unreadCount = chat.unreadCount || Chat.unreadCounts?.[chat.id] || 0;
+    const timeStr = chat.lastMessage?.createdAt ? this.formatTime(chat.lastMessage.createdAt) : (chat.updated_at ? this.formatTime(chat.updated_at) : '');
+    
     return `
       <div class="chat-item" data-chat-id="${chat.id}">
         ${this.getAvatar(avatar, isOnline)}
         <div class="chat-item-info">
           <div class="chat-item-name">${this.escapeHtml(name)}</div>
-          <div class="chat-item-preview">${chat.type === 'group' ? '群聊' : '点击开始聊天'}</div>
+          <div class="chat-item-preview">${this.escapeHtml(preview)}</div>
         </div>
         <div class="chat-item-meta">
-          <span class="chat-item-time">${chat.updated_at ? this.formatTime(chat.updated_at) : ''}</span>
-          ${chat.unread_count > 0 ? `<span class="chat-item-badge">${chat.unread_count}</span>` : ''}
+          <span class="chat-item-time">${timeStr}</span>
+          ${unreadCount > 0 ? `<span class="chat-item-badge">${unreadCount > 99 ? '99+' : unreadCount}</span>` : ''}
         </div>
       </div>
     `;
