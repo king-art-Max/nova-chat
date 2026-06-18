@@ -854,6 +854,16 @@ ${text}` }
     });
   });
 
+  // 数据库状态接口
+  app.get('/api/status', (req, res) => {
+    res.json({
+      success: true,
+      dbMode: process.env.DATABASE_URL ? 'PostgreSQL' : 'SQLite (MEMORY - DATA WILL BE LOST!)',
+      hasDatabase: !!process.env.DATABASE_URL,
+      hasAI: !!process.env.DEEPSEEK_API_KEY
+    });
+  });
+
   // ==================== 启动服务器 ====================
 
   const PORT = process.env.PORT || 3000;
