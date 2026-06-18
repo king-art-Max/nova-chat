@@ -52,7 +52,7 @@ const AIChat = {
         e.preventDefault();
         const gal = card.dataset.gal;
         console.log('AI人格点击, gal:', gal);
-        const persona = this.personas.find(p => p.gal_number === gal);
+        const persona = this.personas.find(p => p.galNumber === gal);
         if (persona) {
           console.log('启动AI对话:', persona.name);
           this.startChat(persona);
@@ -125,7 +125,7 @@ const AIChat = {
    * 恢复对话历史
    */
   restoreHistory() {
-    const history = this.conversationHistory[this.currentPersona.gal_number];
+    const history = this.conversationHistory[this.currentPersona.galNumber];
     const container = document.getElementById('ai-chat-messages');
     container.innerHTML = '';
     
@@ -199,7 +199,7 @@ const AIChat = {
     input.value = '';
     
     // 添加到历史
-    this.conversationHistory[this.currentPersona.gal_number].push({
+    this.conversationHistory[this.currentPersona.galNumber].push({
       isUser: true,
       content
     });
@@ -212,9 +212,9 @@ const AIChat = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          aiGalNumber: this.currentPersona.gal_number,
+          aiGalNumber: this.currentPersona.galNumber,
           message: content,
-          history: this.conversationHistory[this.currentPersona.gal_number].slice(-10)
+          history: this.conversationHistory[this.currentPersona.galNumber].slice(-10)
         })
       });
       
@@ -228,7 +228,7 @@ const AIChat = {
         this.addAIMessage(data.reply);
         
         // 添加到历史
-        this.conversationHistory[this.currentPersona.gal_number].push({
+        this.conversationHistory[this.currentPersona.galNumber].push({
           isUser: false,
           content: data.reply
         });
@@ -292,7 +292,7 @@ const AIChat = {
    */
   clearHistory() {
     if (this.currentPersona) {
-      this.conversationHistory[this.currentPersona.gal_number] = [];
+      this.conversationHistory[this.currentPersona.galNumber] = [];
       UI.showConfirm('清空对话', '确定要清空与 ' + this.currentPersona.name + ' 的对话历史吗？', () => {
         const container = document.getElementById('ai-chat-messages');
         container.innerHTML = '';
