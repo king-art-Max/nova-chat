@@ -869,6 +869,33 @@ async function deleteChat(chatId) {
   return result.changes > 0;
 }
 
+async function checkCanRecall(messageId) {
+  if (isProduction && pool) {
+    // PG模式：在数据库端做时间比较，避免JS/PG时区不一致
+    const result = await pool.query(
+      `SELECT id, chat_id, sender_id, created_at,
+              EXTRACT(EPOCH FROM (NOW() - created_at)) / 60 AS diff_minutes
+       FROM messages WHERE id = $1`,
+      [messageId]
+    );
+    if (!result.rows.length) return null;
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      chat_id: row.chat_id,
+      sender_id: row.sender_id,
+      created_at: row.created_at,
+      canRecall: row.diff_minutes <= 2
+    };
+  } else {
+    // SQLite模式：用JS比较
+    const message = await queryOne('SELECT * FROM messages WHERE id = ?', [messageId]);
+    if (!message) return null;
+    const diffMinutes = (Date.now() - new Date(message.created_at).getTime()) / 60000;
+    return { ...message, canRecall: diffMinutes <= 2 };
+  }
+}
+
 async function recallMessage(messageId) {
   const result = await runSql(
     `UPDATE messages SET encrypted_content = ?, is_recalled = ? WHERE id = ?`,
@@ -1060,6 +1087,7 @@ module.exports = {
   deleteMessage,
   deleteContact,
   deleteChat,
+  checkCanRecall,
   recallMessage,
   getMessageById,
   markMessageRead,
@@ -1228,6 +1256,7 @@ async function getChatByInviteCode(inviteCode) {
 
 // ==================== PostgreSQL新增表 ====================
 async function createAdditionalTables() {
+  console.log('🔧 开始创建附加表...');
   // AI公司会议表
   try { await pool.query(`CREATE TABLE IF NOT EXISTS meetings (
     id SERIAL PRIMARY KEY,
@@ -1299,6 +1328,8 @@ initDatabase = async function() {
     await createAdditionalTablesSQLite();
   }
 };
+// 同步更新module.exports中的initDatabase引用
+module.exports.initDatabase = initDatabase;
 
 // ==================== AI公司岗位人格初始化 ====================
 const AI_COMPANY_PERSONAS = [

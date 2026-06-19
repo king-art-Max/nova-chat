@@ -885,6 +885,9 @@ const Chat = {
     messageEl.className = `message ${isSent ? 'sent' : 'received'} ${message.type || ''}`;
     messageEl.dataset.messageId = message.id || '';
     messageEl.dataset.senderId = message.senderId || '';
+    // 阅后即焚：设置burnAfter dataset供倒计时使用
+    const burnAfter = message.burnAfter || message.burn_after || 0;
+    if (burnAfter > 0) messageEl.dataset.burnAfter = burnAfter;
     
     // 时间分割线
     try {
@@ -3971,14 +3974,7 @@ Object.assign(Chat, {
    * 7. 撤回消息
    */
   async recallMessage(messageEl, message) {
-    const messageTime = new Date(message.createdAt);
-    const now = new Date();
-    const diffMinutes = (now - messageTime) / 1000 / 60;
-    
-    if (diffMinutes > 2) {
-      UI.showToast("消息已超过2分钟，无法撤回");
-      return;
-    }
+    // 不在前端做2分钟限制判断，由后端数据库端统一判断（避免JS/PG时区不一致）
     
     UI.showConfirm("撤回消息", "确定要撤回这条消息吗？", async () => {
       try {
@@ -4000,8 +3996,10 @@ Object.assign(Chat, {
             })
           });
           
-          if (!response.ok) {
-            throw new Error("撤回失败");
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            UI.showToast(data.error || "撤回失败");
+            return;
           }
         }
         

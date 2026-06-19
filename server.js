@@ -575,30 +575,28 @@ async function startServer() {
     }
     
     try {
-      // 验证消息是否属于该用户且在2分钟内
-      const message = await db.getMessageById(messageId);
-      if (!message) {
+      // 使用数据库端时间比较，避免JS/PG时区不一致
+      const recallCheck = await db.checkCanRecall(messageId);
+      if (!recallCheck) {
         return res.status(404).json({ success: false, error: '消息不存在' });
       }
       
-      if (message.sender_id !== userId) {
+      if (recallCheck.sender_id !== userId) {
         return res.status(403).json({ success: false, error: '只能撤回自己的消息' });
       }
       
-      const messageTime = new Date(message.created_at);
-      const now = new Date();
-      const diffMinutes = (now - messageTime) / 1000 / 60;
-      
-      if (diffMinutes > 2) {
+      if (!recallCheck.canRecall) {
         return res.status(400).json({ success: false, error: '消息已超过2分钟，无法撤回' });
       }
+      
+      const chatId = recallCheck.chat_id;
       
       const success = await db.recallMessage(messageId);
       if (success) {
         // 广播撤回事件
-        io.to(`chat-${message.chat_id}`).emit('message-recalled', { 
+        io.to(`chat-${chatId}`).emit('message-recalled', { 
           messageId, 
-          chatId: message.chat_id 
+          chatId 
         });
         res.json({ success: true });
       } else {
@@ -1137,8 +1135,8 @@ function getAICompanyFallbackReply(galNumber, userMessage) {
     socket.on('recall-message', async (data) => {
       const { messageId, chatId, userId } = data;
       try {
-        const message = await db.getMessageById(messageId);
-        if (!message || message.sender_id !== userId) {
+        const recallCheck = await db.checkCanRecall(messageId);
+        if (!recallCheck || recallCheck.sender_id !== userId || !recallCheck.canRecall) {
           socket.emit('error', { message: '无法撤回此消息' });
           return;
         }
