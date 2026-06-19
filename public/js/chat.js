@@ -176,6 +176,21 @@ const Chat = {
       });
     }
     
+    // 聊天搜索
+    const chatSearchInput = document.getElementById('chat-search-input');
+    if (chatSearchInput) {
+      chatSearchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        const items = document.querySelectorAll('#chat-list .chat-item');
+        items.forEach(item => {
+          const name = item.querySelector('.chat-item-name')?.textContent.toLowerCase() || '';
+          const preview = item.querySelector('.chat-item-preview')?.textContent.toLowerCase() || '';
+          const match = !query || name.includes(query) || preview.includes(query);
+          item.style.display = match ? '' : 'none';
+        });
+      });
+    }
+    
     // 初始化表情网格
     this.initEmojiGrid();
     
@@ -962,6 +977,32 @@ const Chat = {
       messageHTML += `<div class="message-content recalled">${UI.escapeHtml(content)}</div>`;
     } else if (isImage) {
       messageHTML += `<div class="message-content"><img src="${content}" class="chat-image" data-preview="true"></div>`;
+    } else if (message.type === 'voice') {
+      // 语音消息渲染
+      let duration = 0;
+      try {
+        const parsed = JSON.parse(raw);
+        duration = parsed.duration || 0;
+      } catch(e) {}
+      messageHTML += `<div class="message-content voice-message"><div class="voice-message-content" onclick="Chat.togglePlayVoice(this, '${content.startsWith('data:') ? content : ''}')">
+        <span class="voice-icon">🎤</span>
+        <div class="voice-waveform"><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span></div>
+        <span class="voice-duration">${duration}秒</span>
+      </div></div>`;
+    } else if (message.type === 'file') {
+      // 文件消息渲染
+      let fileName = '文件', fileSize = '';
+      try {
+        const parsed = JSON.parse(raw);
+        fileName = parsed.fileName || '文件';
+        fileSize = Chat.formatFileSize ? Chat.formatFileSize(parsed.fileSize) : '';
+      } catch(e) {}
+      messageHTML += `<div class="message-content file-message"><div class="file-message-content" onclick="UI.downloadFile && UI.downloadFile('${raw}', '${UI.escapeHtml(fileName)}')">
+        <span class="file-icon">📎</span>
+        <div class="file-info"><div class="file-name">${UI.escapeHtml(fileName)}</div><div class="file-size">${fileSize}</div></div>
+      </div></div>`;
+    } else if (message.type === 'forwarded') {
+      messageHTML += `<div class="message-content forwarded"><span class="forward-label">🔄 转发</span>${safeContent}</div>`;
     } else {
       const safeContent = typeof UI !== 'undefined' && UI.escapeHtml ? UI.escapeHtml(content) : content.replace(/</g,'&lt;').replace(/>/g,'&gt;');
       messageHTML += `<div class="message-content">${safeContent}</div>`;
@@ -1406,7 +1447,7 @@ const Chat = {
       this.audioChunks = [];
       this.mediaRecorder = new MediaRecorder(stream);
       this.mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) this.audioChunks.push(e.data); };
-      this.mediaRecorder.onstop = () => { const blob = new Blob(this.audioChunks, {type: 'audio/webm'}); this.sendVoiceMessage(blob); stream.getTracks().forEach(t => t.stop()); };
+      this.mediaRecorder.onstop = () => { const blob = new Blob(this.audioChunks, {type: 'audio/webm'}); this.audioChunks = []; this._pendingVoiceBlob = blob; this.sendVoiceMessage(); stream.getTracks().forEach(t => t.stop()); };
       this.mediaRecorder.start();
       this.isRecording = true;
       this.recordingSeconds = 0;
@@ -1504,9 +1545,10 @@ const Chat = {
     panel.classList.remove('hidden');
   },
   async sendRedPacket() {
+    if (!this.currentChat) { UI.showToast('请先打开一个聊天'); return; }
     const amount = parseFloat(document.getElementById('rp-amount').value);
     const count = parseInt(document.getElementById('rp-count').value) || 1;
-    const type = document.querySelector('#rp-type-normal.active') ? 'normal' : 'random';
+    const type = document.querySelector('.rp-type-btn.selected')?.dataset.type === 'normal' ? 'normal' : 'random';
     const message = document.getElementById('rp-message').value || '恭喜发财，大吉大利';
     if (!amount || amount <= 0) { UI.showToast('请输入有效金额'); return; }
     if (!count || count <= 0) { UI.showToast('请输入有效个数'); return; }
@@ -1889,7 +1931,7 @@ const Chat = {
       this.updateChatListBadge(this.currentChat.id);
       // 离开Socket房间
       if (window.socket && window.socket.connected) {
-        socket.emit('leave-chat', this.currentChat.id);
+        window.socket.emit('leave-chat', this.currentChat.id);
       }
       this.currentChat = null;
     }
@@ -2387,9 +2429,12 @@ Object.assign(Chat, {
    * 发送语音消息
    */
   async sendVoiceMessage() {
-    if (this.audioChunks.length === 0 || !this.currentChat) return;
+    if (!this.currentChat) return;
     
-    const blob = new Blob(this.audioChunks, { type: 'audio/webm' });
+    // 优先使用pending blob（来自旧版录音回调）
+    const blob = this._pendingVoiceBlob || new Blob(this.audioChunks, { type: 'audio/webm' });
+    this._pendingVoiceBlob = null;
+    if (blob.size === 0) return;
     const reader = new FileReader();
     
     reader.onloadend = async () => {
@@ -2597,8 +2642,24 @@ Object.assign(Chat, {
   }
 });
 
-// 绑定翻译按钮事件
+// 绑定红包和翻译按钮事件
 document.addEventListener('DOMContentLoaded', () => {
+  // 红包发送按钮
+  const sendRpBtn = document.getElementById('btn-send-redpacket');
+  if (sendRpBtn) {
+    sendRpBtn.addEventListener('click', () => {
+      Chat.sendRedPacket();
+    });
+  }
+  
+  // 红包类型切换
+  document.querySelectorAll('.rp-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.rp-type-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+  });
+  
   const translateBtn = document.getElementById('btn-do-translate');
   if (translateBtn) {
     translateBtn.addEventListener('click', () => {
@@ -3113,20 +3174,19 @@ Object.assign(Chat, {
         originalMessageId: message.id
       };
       
-      if (window.socket && window.socket.connected) {
-        // HTTP POST发送（可靠通道）
-        try {
-          await fetch('/api/chats/' + forwardMessage.chatId + '/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.getToken() },
-            body: JSON.stringify(forwardMessage)
-          });
-          UI.showToast('消息已转发');
-        } catch(e) {
-          UI.showToast('转发失败');
-        }
-        UI.showToast("消息已转发");
-      } else {
+      // HTTP POST发送（可靠通道）
+      try {
+        await fetch('/api/chats/' + forwardMessage.chatId + '/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.getToken() },
+          body: JSON.stringify(forwardMessage)
+        });
+        UI.showToast('消息已转发');
+        UI.closeModal();
+      } catch(e) {
+        UI.showToast('转发失败');
+      }
+      if (!window.socket || !window.socket.connected) {
         const response = await fetch("/api/chats/" + chatId + "/messages", {
           method: "POST",
           headers: {

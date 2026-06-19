@@ -1001,7 +1001,7 @@ const MenuFunctions = {
       </div>
     `, [
       { text: '取消', class: 'btn-secondary' },
-      { text: '修改', class: 'btn-primary', onClick: () => MenuFunctions.submitChangePassword() }
+      { text: '修改', class: 'btn-primary', closeOnClick: false, onClick: () => MenuFunctions.submitChangePassword() }
     ]);
   },
   

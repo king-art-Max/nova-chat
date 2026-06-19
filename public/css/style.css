@@ -5130,3 +5130,33 @@ ul, ol {
 .message-content.burned {
   opacity: 0.5;
 }
+
+/* ==================== 转发消息样式 ==================== */
+.message-content.forwarded {
+  border-left: 3px solid var(--accent-blue);
+  padding-left: 8px;
+}
+.forward-label {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--accent-blue);
+  margin-right: 6px;
+  font-weight: 500;
+}
+
+/* ==================== 红包类型按钮样式 ==================== */
+.rp-type-btn {
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-right: 8px;
+}
+.rp-type-btn.selected {
+  background: #FF4444;
+  color: #fff;
+  border-color: #FF4444;
+}
