@@ -3661,19 +3661,31 @@ Object.assign(Chat, {
       });
     });
     
-    // 定位菜单
-    const rect = messageEl.getBoundingClientRect();
-    menu.style.position = "fixed";
-    menu.style.left = (rect.left + rect.width / 2) + "px";
-    menu.style.top = (rect.top - 10) + "px";
-    menu.style.transform = "translate(-50%, -100%)";
-    
     // 存储当前菜单引用
     this.currentMessageMenu = menu;
     this.currentMessage = message;
     this.currentMessageEl = messageEl;
     
     document.body.appendChild(menu);
+    
+    // 定位菜单：横排居中于消息上方，边界保护
+    const menuRect = menu.getBoundingClientRect();
+    const msgRect = messageEl.getBoundingClientRect();
+    let menuLeft = msgRect.left + msgRect.width / 2 - menuRect.width / 2;
+    let menuTop = msgRect.top - menuRect.height - 10;
+    // 右边界保护
+    if (menuLeft + menuRect.width > window.innerWidth - 8) {
+      menuLeft = window.innerWidth - menuRect.width - 8;
+    }
+    // 左边界保护
+    if (menuLeft < 8) menuLeft = 8;
+    // 如果上方放不下，放到消息下方
+    if (menuTop < 60) {
+      menuTop = msgRect.bottom + 10;
+    }
+    menu.style.left = menuLeft + "px";
+    menu.style.top = menuTop + "px";
+    menu.style.transform = "none";
     
     // 点击其他地方关闭菜单
     setTimeout(() => {
