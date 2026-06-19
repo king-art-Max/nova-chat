@@ -5202,3 +5202,11 @@ ul, ol {
   opacity: 0.5;
   pointer-events: none;
 }
+
+
+/* 禁用按钮样式 */
+.btn:disabled, .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}

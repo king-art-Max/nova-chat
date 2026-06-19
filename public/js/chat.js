@@ -386,32 +386,36 @@ const Chat = {
           
           // 绑定点击事件
           chatList.querySelectorAll('.chat-item').forEach(item => {
+            // 长按标志，防止长按后触发click
+            let longPressed = false;
+            let pressTimer;
+            
             item.addEventListener('click', () => {
+              if (longPressed) {
+                longPressed = false;
+                return;
+              }
               const chatId = parseInt(item.dataset.chatId);
               this.openChat(chatId);
             });
             
-            // 长按置顶/取消置顶
-            let pressTimer;
-            item.addEventListener('touchstart', () => {
+            // 长按置顶/删除
+            const startPress = () => {
+              longPressed = false;
               pressTimer = setTimeout(() => {
+                longPressed = true;
                 this.togglePinChat(item);
               }, 500);
-            });
-            item.addEventListener('touchend', () => {
+            };
+            const endPress = () => {
               clearTimeout(pressTimer);
-            });
-            item.addEventListener('mousedown', () => {
-              pressTimer = setTimeout(() => {
-                this.togglePinChat(item);
-              }, 500);
-            });
-            item.addEventListener('mouseup', () => {
-              clearTimeout(pressTimer);
-            });
-            item.addEventListener('mouseleave', () => {
-              clearTimeout(pressTimer);
-            });
+            };
+            
+            item.addEventListener('touchstart', startPress);
+            item.addEventListener('touchend', endPress);
+            item.addEventListener('mousedown', startPress);
+            item.addEventListener('mouseup', endPress);
+            item.addEventListener('mouseleave', endPress);
           });
         }
       }

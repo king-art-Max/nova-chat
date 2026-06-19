@@ -1602,7 +1602,12 @@ const AICompany = {
     // 重置表单
     document.getElementById('ai-company-name').value = '';
     document.getElementById('ai-company-industry').value = '科技';
-    document.querySelectorAll('input[name="ai-role"]').forEach(cb => cb.checked = false);
+    // 同步复选框和标签的选中状态（默认全选）
+    document.querySelectorAll('input[name="ai-role"]').forEach(cb => {
+      cb.checked = true;
+      const label = cb.closest('.ai-role-option');
+      if (label) label.classList.add('checked');
+    });
   },
   
   /**
@@ -1631,6 +1636,11 @@ const AICompany = {
       return;
     }
     
+    // 防重复点击
+    const confirmBtn = document.getElementById('btn-confirm-ai-company');
+    if (confirmBtn.disabled) return;
+    confirmBtn.disabled = true;
+    
     try {
       UI.showToast('正在创建AI公司...');
       const response = await fetch('/api/ai-company/create', {
@@ -1647,23 +1657,33 @@ const AICompany = {
       const data = await response.json();
       
       if (data.success) {
+        if (data.isExisting) {
+          UI.showToast('该公司已存在');
+        } else {
+          UI.showToast('AI公司创建成功！');
+        }
         this.closeCreateModal();
-        UI.showToast('AI公司创建成功！');
         
         // 保存群组信息供会议使用
-        localStorage.setItem(`ai_company_${data.chatId}`, JSON.stringify({
-          name: data.chatName,
-          industry: industry,
-          roles: selectedRoles
-        }));
+        try {
+          localStorage.setItem(`ai_company_${data.chatId}`, JSON.stringify({
+            name: data.chatName,
+            industry: industry,
+            roles: selectedRoles
+          }));
+        } catch(e) {}
         
-        // 加入群组并打开聊天
-        Chat.joinChat(data.chatId);
+        // 加入群组并刷新聊天列表
+        try {
+          await Chat.joinChat(data.chatId);
+        } catch(e) { console.error('joinChat error:', e); }
         
-        // 刷新聊天列表并打开群聊
-        Chat.loadChatList();
+        try {
+          await Chat.loadChatList();
+        } catch(e) { console.error('loadChatList error:', e); }
+        
         setTimeout(() => {
-          Chat.openChat(data.chatId);
+          try { Chat.openChat(data.chatId); } catch(e) {}
         }, 500);
       } else {
         UI.showToast(data.error || '创建失败');
@@ -1671,6 +1691,8 @@ const AICompany = {
     } catch (error) {
       console.error('创建AI公司失败:', error);
       UI.showToast('创建失败');
+    } finally {
+      confirmBtn.disabled = false;
     }
   },
   
@@ -1825,6 +1847,23 @@ document.addEventListener('DOMContentLoaded', () => {
   if (startMeetingBtn) {
     startMeetingBtn.addEventListener('click', () => AICompany.startMeeting());
   }
+  
+  // AI岗位选项点击时同步label的checked类
+  document.querySelectorAll('.ai-role-option').forEach(label => {
+    label.addEventListener('click', () => {
+      const checkbox = label.querySelector('input[name="ai-role"]');
+      if (checkbox) {
+        // 延迟一帧等待checkbox状态更新
+        requestAnimationFrame(() => {
+          if (checkbox.checked) {
+            label.classList.add('checked');
+          } else {
+            label.classList.remove('checked');
+          }
+        });
+      }
+    });
+  });
 });
 
 // 收藏消息功能

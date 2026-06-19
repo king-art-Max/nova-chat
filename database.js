@@ -990,6 +990,35 @@ async function toggleContactStar(contactId, isStarred) {
   );
 }
 
+
+// ==================== AI用户账号管理 ====================
+async function ensureAIUser(persona) {
+  // 检查是否已有对应用户
+  let user = await getUserByGal(persona.gal_number);
+  if (user) return user;
+  
+  // 为AI人格创建用户账号
+  const bcrypt = require('bcryptjs');
+  const passwordHash = bcrypt.hashSync('AI_PERSONA_' + persona.gal_number, 10);
+  try {
+    const result = await runInsert(
+      'INSERT INTO users (gal_number, email, nickname, public_key, password_hash, avatar) VALUES (?, ?, ?, ?, ?, ?)',
+      [persona.gal_number, null, persona.name, null, passwordHash, persona.avatar || 'robot']
+    );
+    return {
+      id: result.lastInsertRowid,
+      gal_number: persona.gal_number,
+      nickname: persona.name,
+      avatar: persona.avatar || 'robot'
+    };
+  } catch (e) {
+    // 可能并发创建，再次查询
+    user = await getUserByGal(persona.gal_number);
+    if (user) return user;
+    throw e;
+  }
+}
+
 module.exports = {
   initDatabase,
   registerUser,
@@ -1246,6 +1275,7 @@ initAIPersonas = async function() {
 
 // 导出新函数
 module.exports.getAIPersonasByGalNumbers = getAIPersonasByGalNumbers;
+module.exports.ensureAIUser = ensureAIUser;
 module.exports.updateChatGroupMode = updateChatGroupMode;
 module.exports.updateChat = updateChat;
 module.exports.updateChatMemberRole = updateChatMemberRole;

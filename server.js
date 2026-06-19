@@ -1025,28 +1025,46 @@ ${text}` }
         return res.status(404).json({ success: false, error: '用户不存在' });
       }
       
+      // 检查是否已存在同名AI公司（防重复创建）
+      const existingChats = await db.getChats(userId);
+      const duplicate = existingChats.find(c => c.name === `${companyName} AI公司` && c.type === 'group');
+      if (duplicate) {
+        return res.json({
+          success: true,
+          chatId: duplicate.id,
+          chatName: duplicate.name,
+          members: [],
+          isExisting: true
+        });
+      }
+      
       // 创建群组
       const chatId = await db.createGroupChat(`${companyName} AI公司`, userId);
       
       // 更新群组信息
       await db.updateChatGroupMode(chatId, 'ai_company', `${industry || '综合'}`);
       
-      // 获取选中的AI人格
-      const personas = await db.getAIPersonasByGalNumbers(selectedRoles);
-      
       // 添加用户为群主
       await db.updateChatMemberRole(chatId, userId, 'owner');
       
-      // 添加AI成员
+      // 获取选中的AI人格，为每个AI创建用户账号并添加为群成员
+      const personas = await db.getAIPersonasByGalNumbers(selectedRoles);
       const addedMembers = [];
       for (const persona of personas) {
-        await db.addChatMember(chatId, persona.id, 'member');
-        addedMembers.push({
-          id: persona.id,
-          galNumber: persona.gal_number,
-          nickname: persona.name,
-          role: 'member'
-        });
+        try {
+          // 确保AI人格有对应的用户账号
+          const aiUser = await db.ensureAIUser(persona);
+          await db.addChatMember(chatId, aiUser.id, 'member');
+          addedMembers.push({
+            id: aiUser.id,
+            galNumber: persona.gal_number,
+            nickname: persona.name,
+            role: 'member'
+          });
+        } catch (e) {
+          console.error('添加AI成员失败:', persona.gal_number, e.message);
+          // 单个AI成员失败不影响整体创建
+        }
       }
       
       res.json({
