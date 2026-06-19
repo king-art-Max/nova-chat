@@ -978,13 +978,19 @@ const Chat = {
     } else if (isImage) {
       messageHTML += `<div class="message-content"><img src="${content}" class="chat-image" data-preview="true"></div>`;
     } else if (message.type === 'voice') {
-      // 语音消息渲染
+      // 语音消息渲染 — 使用data属性+事件委托，避免base64嵌入onclick
       let duration = 0;
+      let audioSrc = '';
       try {
         const parsed = JSON.parse(raw);
         duration = parsed.duration || 0;
-      } catch(e) {}
-      messageHTML += `<div class="message-content voice-message"><div class="voice-message-content" onclick="Chat.togglePlayVoice(this, '${content.startsWith('data:') ? content : ''}')">
+        audioSrc = parsed.content || '';
+      } catch(e) {
+        // raw就是base64本身
+        audioSrc = content || '';
+      }
+      const voiceMsgId = 'voice-' + (message.id || Date.now());
+      messageHTML += `<div class="message-content voice-message"><div class="voice-message-content" id="${voiceMsgId}" data-audio-src="${audioSrc ? '1' : ''}">
         <span class="voice-icon">🎤</span>
         <div class="voice-waveform"><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span></div>
         <span class="voice-duration">${duration}秒</span>
@@ -1002,7 +1008,21 @@ const Chat = {
         <div class="file-info"><div class="file-name">${UI.escapeHtml(fileName)}</div><div class="file-size">${fileSize}</div></div>
       </div></div>`;
     } else if (message.type === 'forwarded') {
-      messageHTML += `<div class="message-content forwarded"><span class="forward-label">🔄 转发</span>${safeContent}</div>`;
+      const fwdSafe = typeof UI !== 'undefined' && UI.escapeHtml ? UI.escapeHtml(content) : content.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      messageHTML += `<div class="message-content forwarded"><span class="forward-label">🔄 转发</span>${fwdSafe}</div>`;
+    } else if (message.type === 'redpacket') {
+      // 红包消息渲染
+      let rpAmount = '', rpMessage = '恭喜发财', rpType = 'random', rpId = '';
+      try {
+        const parsed = JSON.parse(raw);
+        rpAmount = parsed.amount || '';
+        rpMessage = parsed.message || '恭喜发财';
+        rpType = parsed.rpType || 'random';
+        rpId = parsed.redPacketId || '';
+      } catch(e) {}
+      messageHTML += `<div class="message-content redpacket-msg" data-rp-id="${rpId}" data-rp-claimed="false" data-rp-owner="${message.senderId === Auth.getCurrentUserId() ? 'true' : 'false'}">
+        <div class="rp-msg-inner"><span class="rp-msg-icon">🧧</span><div class="rp-msg-info"><div class="rp-msg-amount">${rpAmount ? rpAmount + ' 星币' : '红包'}</div><div class="rp-msg-text">${UI.escapeHtml(rpMessage)}</div></div></div>
+      </div>`;
     } else {
       const safeContent = typeof UI !== 'undefined' && UI.escapeHtml ? UI.escapeHtml(content) : content.replace(/</g,'&lt;').replace(/>/g,'&gt;');
       messageHTML += `<div class="message-content">${safeContent}</div>`;
@@ -1042,6 +1062,40 @@ const Chat = {
     } catch(e) {}
     
     messagesEl.appendChild(messageEl);
+    
+    // 语音消息音频数据存储+播放事件绑定（避免base64嵌入HTML属性）
+    if (message.type === 'voice') {
+      let audioSrc = '';
+      try {
+        const parsed = JSON.parse(raw);
+        audioSrc = parsed.content || '';
+      } catch(e) {
+        audioSrc = content || '';
+      }
+      const voiceEl = document.getElementById('voice-' + (message.id || ''));
+      if (voiceEl && audioSrc) {
+        // 存储音频数据到内存映射
+        if (!this._voiceAudioMap) this._voiceAudioMap = {};
+        this._voiceAudioMap[voiceEl.id] = audioSrc;
+        voiceEl.addEventListener('click', () => {
+          const src = Chat._voiceAudioMap && Chat._voiceAudioMap[voiceEl.id];
+          if (src) Chat.togglePlayVoice(voiceEl, src);
+        });
+      }
+    }
+    
+    // 红包消息点击事件
+    if (message.type === 'redpacket') {
+      const rpEl = messageEl.querySelector('.redpacket-msg');
+      if (rpEl) {
+        const rpId = rpEl.dataset.rpId;
+        const isOwner = rpEl.dataset.rpOwner === 'true';
+        const claimed = rpEl.dataset.rpClaimed === 'true';
+        rpEl.addEventListener('click', () => {
+          if (rpId) this.handleRedPacketClick(parseInt(rpId), claimed, isOwner);
+        });
+      }
+    }
     messagesEl.scrollTop = messagesEl.scrollHeight;
     
     // 标记已读
@@ -1559,7 +1613,28 @@ const Chat = {
         body: JSON.stringify({chatId: this.currentChat.id, senderId: Auth.getCurrentUserId(), amount, count, type, message})
       });
       const data = await response.json();
-      if (data.success) { this.closeAllPanels(); UI.showToast('红包已发送'); Wallet && Wallet.updateUI && Wallet.updateUI(); }
+      if (data.success) {
+        this.closeAllPanels();
+        UI.showToast('红包已发送');
+        // 在聊天窗口显示红包消息
+        const redPacketId = data.redPacket?.id || data.redPacketId || '';
+        const rpContent = JSON.stringify({ type: 'redpacket', amount, count, rpType: type, message, redPacketId });
+        const localMessage = {
+          id: 'local-rp-' + Date.now(),
+          chatId: this.currentChat.id,
+          senderId: Auth.getCurrentUserId(),
+          galNumber: Auth.currentUser?.galNumber || '',
+          nickname: Auth.currentUser?.nickname || '',
+          encryptedContent: rpContent,
+          type: 'redpacket',
+          createdAt: new Date().toISOString()
+        };
+        if (!this.chatMessages[this.currentChat.id]) this.chatMessages[this.currentChat.id] = [];
+        this.chatMessages[this.currentChat.id].push(localMessage);
+        this.displayMessage(localMessage, true);
+        document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
+        if (Wallet && Wallet.updateUI) Wallet.updateUI();
+      }
       else UI.showToast(data.error || '发送红包失败');
     } catch (error) { console.error('发送红包失败:', error); UI.showToast('发送红包失败'); }
   },
@@ -1845,7 +1920,7 @@ const Chat = {
     this._lastPollTime = Date.now();
     this._pollTimer = setInterval(() => {
       this.pollNewMessages();
-    }, 5000);
+    }, 15000); // 15秒轮询（避免频繁API调用）
   },
   
   stopMessagePolling() {
@@ -2393,6 +2468,8 @@ Object.assign(Chat, {
     if (this.mediaRecorder && this.isRecording) {
       this.mediaRecorder.stop();
       this.isRecording = false;
+      this._cancelAnimFrame && cancelAnimationFrame(this._cancelAnimFrame);
+      this._cancelAnimFrame = null;
       
       const timer = document.getElementById('voice-timer');
       if (timer) {
@@ -2422,7 +2499,7 @@ Object.assign(Chat, {
       durationEl.textContent = display;
     }
     
-    requestAnimationFrame(() => this.updateRecordingTime());
+    this._cancelAnimFrame = requestAnimationFrame(() => this.updateRecordingTime());
   },
   
   /**
@@ -2439,6 +2516,8 @@ Object.assign(Chat, {
     
     reader.onloadend = async () => {
       const base64 = reader.result;
+      const duration = Math.floor((Date.now() - (this.recordingStartTime || Date.now())) / 1000) || this.recordingSeconds || 0;
+      const content = JSON.stringify({ type: 'voice', duration, content: base64 });
       
       // HTTP POST发送（可靠通道）
       try {
@@ -2448,7 +2527,7 @@ Object.assign(Chat, {
           body: JSON.stringify({
             chatId: this.currentChat.id,
             senderId: Auth.getCurrentUserId(),
-            encryptedContent: base64,
+            encryptedContent: content,
             type: 'voice',
             burnAfter: 0,
             isAnonymous: false
@@ -2457,20 +2536,22 @@ Object.assign(Chat, {
       } catch(e) { console.error('语音发送失败:', e); }
       
       // 本地显示
-      const duration = Math.floor((Date.now() - this.recordingStartTime) / 1000);
       const localMessage = {
         id: 'local-' + Date.now(),
         chatId: this.currentChat.id,
         senderId: Auth.getCurrentUserId(),
         galNumber: Auth.currentUser?.galNumber || '',
         nickname: Auth.currentUser?.nickname || '',
-        encryptedContent: base64,
+        encryptedContent: content,
         type: 'voice',
         duration,
         createdAt: new Date().toISOString()
       };
       
+      if (!this.chatMessages[this.currentChat.id]) this.chatMessages[this.currentChat.id] = [];
+      this.chatMessages[this.currentChat.id].push(localMessage);
       this.displayMessage(localMessage, true);
+      document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
     };
     
     reader.readAsDataURL(blob);
@@ -3174,7 +3255,7 @@ Object.assign(Chat, {
         originalMessageId: message.id
       };
       
-      // HTTP POST发送（可靠通道）
+      // HTTP POST发送（唯一可靠通道，不重复发送）
       try {
         await fetch('/api/chats/' + forwardMessage.chatId + '/messages', {
           method: 'POST',
@@ -3185,22 +3266,6 @@ Object.assign(Chat, {
         UI.closeModal();
       } catch(e) {
         UI.showToast('转发失败');
-      }
-      if (!window.socket || !window.socket.connected) {
-        const response = await fetch("/api/chats/" + chatId + "/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + Auth.getToken()
-          },
-          body: JSON.stringify(forwardMessage)
-        });
-        
-        if (response.ok) {
-          UI.showToast("消息已转发");
-        } else {
-          UI.showToast("转发失败");
-        }
       }
     } catch (error) {
       console.error("转发失败:", error);

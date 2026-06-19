@@ -5160,3 +5160,45 @@ ul, ol {
   color: #fff;
   border-color: #FF4444;
 }
+
+/* ==================== 红包消息样式 ==================== */
+.redpacket-msg {
+  background: linear-gradient(135deg, #FF6B6B, #FF4444) !important;
+  border-radius: 12px !important;
+  padding: 12px 16px !important;
+  cursor: pointer;
+  max-width: 240px;
+  color: #fff;
+}
+.redpacket-msg:hover {
+  opacity: 0.9;
+}
+.rp-msg-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rp-msg-icon {
+  font-size: 28px;
+}
+.rp-msg-info {
+  flex: 1;
+}
+.rp-msg-amount {
+  font-size: 16px;
+  font-weight: 700;
+}
+.rp-msg-text {
+  font-size: 12px;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+.message.sent .redpacket-msg {
+  background: linear-gradient(135deg, #FF8E53, #FF4444) !important;
+}
+
+/* ==================== 输入禁用状态 ==================== */
+.chat-input-area.input-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
