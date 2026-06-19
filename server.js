@@ -363,7 +363,7 @@ async function startServer() {
             avatar: m.avatar,
             publicKey: m.public_key,
             role: m.role,
-            is_muted: m.is_muted
+            is_muted: m.is_muted || false
           })),
           lastMessage: lastMsg ? {
             content: lastMsg.encrypted_content,
@@ -1773,7 +1773,7 @@ function getAICompanyFallbackReply(galNumber, userMessage) {
           nickname: m.nickname,
           avatar: m.avatar,
           role: m.role,
-          is_muted: m.is_muted
+          is_muted: m.is_muted || false
         }))
       });
     } catch (error) {

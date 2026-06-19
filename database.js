@@ -766,13 +766,25 @@ async function addChatMember(chatId, userId, role = 'member') {
 }
 
 async function getChatMembers(chatId) {
-  return await queryAll(
-    `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key, cm.role, cm.is_muted
-     FROM chat_members cm
-     JOIN users u ON cm.user_id = u.id
-     WHERE cm.chat_id = ?`,
-    [chatId]
-  );
+  try {
+    return await queryAll(
+      `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key, cm.role, cm.is_muted
+       FROM chat_members cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.chat_id = ?`,
+      [chatId]
+    );
+  } catch (e) {
+    // is_muted列可能还不存在，回退到不含该列的查询
+    console.warn('getChatMembers: is_muted列查询失败，使用回退查询', e.message);
+    return await queryAll(
+      `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key, cm.role
+       FROM chat_members cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.chat_id = ?`,
+      [chatId]
+    );
+  }
 }
 
 
@@ -1116,19 +1128,29 @@ async function removeChatMember(chatId, userId) {
 
 
 async function muteChatMember(chatId, userId, isMuted) {
-  const result = await runSql(
-    'UPDATE chat_members SET is_muted = ? WHERE chat_id = ? AND user_id = ?',
-    [isMuted ? 1 : 0, chatId, userId]
-  );
-  return result.changes > 0;
+  try {
+    const result = await runSql(
+      'UPDATE chat_members SET is_muted = ? WHERE chat_id = ? AND user_id = ?',
+      [isMuted ? 1 : 0, chatId, userId]
+    );
+    return result.changes > 0;
+  } catch (e) {
+    console.warn('muteChatMember失败(is_muted列可能不存在):', e.message);
+    return false;
+  }
 }
 
 async function unmuteAllMembers(chatId) {
-  const result = await runSql(
-    'UPDATE chat_members SET is_muted = 0 WHERE chat_id = ?',
-    [chatId]
-  );
-  return result.changes > 0;
+  try {
+    const result = await runSql(
+      'UPDATE chat_members SET is_muted = 0 WHERE chat_id = ?',
+      [chatId]
+    );
+    return result.changes > 0;
+  } catch (e) {
+    console.warn('unmuteAllMembers失败(is_muted列可能不存在):', e.message);
+    return false;
+  }
 }
 
 async function transferOwnership(chatId, fromUserId, toUserId) {
@@ -1188,30 +1210,40 @@ async function getChatByInviteCode(inviteCode) {
 // ==================== PostgreSQL新增表 ====================
 async function createAdditionalTables() {
   // AI公司会议表
-  await pool.query(`CREATE TABLE IF NOT EXISTS meetings (
+  try { await pool.query(`CREATE TABLE IF NOT EXISTS meetings (
     id SERIAL PRIMARY KEY,
     chat_id INTEGER REFERENCES chats(id),
     host_id INTEGER REFERENCES users(id),
     title VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )`);
+  )`); } catch(e) { console.warn('创建meetings表失败:', e.message); }
   
   // chats表新增字段
-  await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS group_mode VARCHAR(20) DEFAULT 'open'`);
-  await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS description TEXT`);
-  await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS join_method VARCHAR(20) DEFAULT 'invite'`);
-  await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS invite_code VARCHAR(20)`);
-  await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS announcement TEXT`);
-  await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS is_muted BOOLEAN DEFAULT FALSE`);
+  const chatColumns = [
+    ['group_mode', 'VARCHAR(20) DEFAULT \'open\''],
+    ['description', 'TEXT'],
+    ['join_method', 'VARCHAR(20) DEFAULT \'invite\''],
+    ['invite_code', 'VARCHAR(20)'],
+    ['announcement', 'TEXT'],
+    ['is_muted', 'BOOLEAN DEFAULT FALSE']
+  ];
+  for (const [col, type] of chatColumns) {
+    try { await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS ${col} ${type}`); } catch(e) { console.warn(`chats.${col}列添加失败:`, e.message); }
+  }
   
-  // messages表新增字段（撤回/阅后即焚/匿踪消息支持）
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_recalled BOOLEAN DEFAULT FALSE`);
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS burn_after INTEGER DEFAULT 0`);
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS burned_at TIMESTAMP`);
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN DEFAULT FALSE`);
+  // messages表新增字段
+  const msgColumns = [
+    ['is_recalled', 'BOOLEAN DEFAULT FALSE'],
+    ['burn_after', 'INTEGER DEFAULT 0'],
+    ['burned_at', 'TIMESTAMP'],
+    ['is_anonymous', 'BOOLEAN DEFAULT FALSE']
+  ];
+  for (const [col, type] of msgColumns) {
+    try { await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS ${col} ${type}`); } catch(e) { console.warn(`messages.${col}列添加失败:`, e.message); }
+  }
   
   // chat_members表新增字段
-  await pool.query(`ALTER TABLE chat_members ADD COLUMN IF NOT EXISTS is_muted BOOLEAN DEFAULT FALSE`);
+  try { await pool.query(`ALTER TABLE chat_members ADD COLUMN IF NOT EXISTS is_muted BOOLEAN DEFAULT FALSE`); } catch(e) { console.warn('chat_members.is_muted列添加失败:', e.message); }
 }
 
 // ==================== SQLite新增表 ====================
