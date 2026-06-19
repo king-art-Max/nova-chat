@@ -492,7 +492,7 @@ async function startServer() {
       io.to(`chat-${chatId}`).emit('new-message', message);
       
       // AI公司群组：自动触发AI回复
-      if (type !== 'self-destruct' && type !== 'red_packet') {
+      if (type !== 'self-destruct' && type !== 'redpacket') {
         triggerAICompanyReply(chatId, senderId, encryptedContent, type, io);
       }
       
@@ -721,12 +721,13 @@ async function startServer() {
       await db.updateBalance(senderId, -(amount));
       // 创建红包
       const redPacket = await db.createRedPacket(chatId, senderId, amount, count, type || 'random', message || '恭喜发财，大吉大利');
-      // 发送红包消息
-      const msgId = await db.saveMessage(chatId, senderId, String(redPacket.id), 'red_packet', 0, 0, false);
+      // 保存红包消息（完整JSON，与前端一致）
+      const rpContent = JSON.stringify({ type: 'redpacket', amount, count, rpType: type || 'random', message: message || '恭喜发财', redPacketId: redPacket.id });
+      const msgId = await db.saveMessage(chatId, senderId, rpContent, 'redpacket', 0, 0, false);
       // 通知聊天室
       io.to(`chat-${chatId}`).emit('new-message', {
-        id: msgId, chatId, senderId, encryptedContent: String(redPacket.id),
-        type: 'red_packet', burnAfter: 0, isAnonymous: false,
+        id: msgId, chatId, senderId, encryptedContent: rpContent,
+        type: 'redpacket', burnAfter: 0, isAnonymous: false,
         createdAt: new Date().toISOString()
       });
       res.json({ success: true, redPacketId: redPacket.id });

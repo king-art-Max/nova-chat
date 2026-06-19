@@ -572,7 +572,7 @@ async function updateUser(userId, data) {
 async function updateUserPassword(userId, newPassword) {
   const bcrypt = require('bcryptjs');
   const passwordHash = bcrypt.hashSync(newPassword, 10);
-  if (isPostgres) {
+  if (isProduction) {
     const result = await pgRunSql('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
     return result.rowCount > 0;
   } else {
@@ -584,7 +584,7 @@ async function updateUserPassword(userId, newPassword) {
 async function verifyPassword(userId, password) {
   const bcrypt = require('bcryptjs');
   let user;
-  if (isPostgres) {
+  if (isProduction) {
     user = await pgQueryOne('SELECT password_hash FROM users WHERE id = $1', [userId]);
   } else {
     user = await queryOne('SELECT password_hash FROM users WHERE id = ?', [userId]);
@@ -594,7 +594,7 @@ async function verifyPassword(userId, password) {
 }
 
 async function getUserFullInfo(userId) {
-  if (isPostgres) {
+  if (isProduction) {
     return await pgQueryOne(
       'SELECT id, gal_number, email, nickname, avatar, public_key, created_at FROM users WHERE id = $1',
       [userId]
@@ -1129,9 +1129,10 @@ async function removeChatMember(chatId, userId) {
 
 async function muteChatMember(chatId, userId, isMuted) {
   try {
+    const mutedValue = isProduction ? isMuted : (isMuted ? 1 : 0);
     const result = await runSql(
       'UPDATE chat_members SET is_muted = ? WHERE chat_id = ? AND user_id = ?',
-      [isMuted ? 1 : 0, chatId, userId]
+      [mutedValue, chatId, userId]
     );
     return result.changes > 0;
   } catch (e) {
@@ -1142,9 +1143,10 @@ async function muteChatMember(chatId, userId, isMuted) {
 
 async function unmuteAllMembers(chatId) {
   try {
+    const mutedValue = isProduction ? false : 0;
     const result = await runSql(
-      'UPDATE chat_members SET is_muted = 0 WHERE chat_id = ?',
-      [chatId]
+      'UPDATE chat_members SET is_muted = ? WHERE chat_id = ?',
+      [mutedValue, chatId]
     );
     return result.changes > 0;
   } catch (e) {
@@ -1168,10 +1170,17 @@ async function transferOwnership(chatId, fromUserId, toUserId) {
 }
 
 async function getMutedMembers(chatId) {
-  return await queryAll(
-    'SELECT user_id FROM chat_members WHERE chat_id = ? AND is_muted = 1',
-    [chatId]
-  );
+  if (isProduction) {
+    return await queryAll(
+      'SELECT user_id FROM chat_members WHERE chat_id = ? AND is_muted IS TRUE',
+      [chatId]
+    );
+  } else {
+    return await queryAll(
+      'SELECT user_id FROM chat_members WHERE chat_id = ? AND is_muted = 1',
+      [chatId]
+    );
+  }
 }
 
 async function createMeeting(chatId, hostId, title) {
@@ -1190,13 +1199,23 @@ async function getMeetings(chatId) {
 }
 
 async function getStarredContacts(userId) {
-  return await queryAll(
-    `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key, c.is_starred
-     FROM contacts c
-     JOIN users u ON c.contact_id = u.id
-     WHERE c.user_id = ? AND c.is_starred = 1 AND c.status = 'accepted'`,
-    [userId]
-  );
+  if (isProduction) {
+    return await queryAll(
+      `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key, c.is_starred
+       FROM contacts c
+       JOIN users u ON c.contact_id = u.id
+       WHERE c.user_id = ? AND c.is_starred IS TRUE AND c.status = 'accepted'`,
+      [userId]
+    );
+  } else {
+    return await queryAll(
+      `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key, c.is_starred
+       FROM contacts c
+       JOIN users u ON c.contact_id = u.id
+       WHERE c.user_id = ? AND c.is_starred = 1 AND c.status = 'accepted'`,
+      [userId]
+    );
+  }
 }
 
 async function getChatById(chatId) {

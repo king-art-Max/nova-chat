@@ -1636,7 +1636,7 @@ const Chat = {
       if (data.success) {
         this.closeAllPanels();
         UI.showToast('红包已发送');
-        // 在聊天窗口显示红包消息
+        // 红包消息已由服务端保存并广播，本地即时显示
         const redPacketId = data.redPacket?.id || data.redPacketId || '';
         const rpContent = JSON.stringify({ type: 'redpacket', amount, count, rpType: type, message, redPacketId });
         const localMessage = {
@@ -3066,8 +3066,8 @@ Object.assign(Chat, {
     
     // 获取联系人列表
     let contacts = [];
-    if (window.AppData && AppData.contacts) {
-      contacts = AppData.contacts.filter(c => c.status === 'accepted' && !currentMemberIds.has(c.id));
+    if (window.Contacts && Contacts.contacts) {
+      contacts = Contacts.contacts.filter(c => c.status === 'accepted' && !currentMemberIds.has(c.id));
     }
     
     if (contacts.length === 0) {
