@@ -608,7 +608,7 @@ const Chat = {
     this.chatMessages[chatId] = [];
     
     // 加入Socket房间
-    window.socket.emit('join-chat', chatId);
+    if (window.socket && window.socket.connected) window.socket.emit('join-chat', chatId);
     
     // 加载历史消息
     await this.loadMessages(chatId);
@@ -1727,7 +1727,7 @@ const Chat = {
     if (message.senderId === Auth.getCurrentUserId() && this.chatMessages[message.chatId]) {
       const localMsg = this.chatMessages[message.chatId].find(m => 
         m.id && m.id.startsWith('local-') && 
-        m.encryptedContent === message.encryptedContent
+        Math.abs(new Date(m.createdAt) - new Date(message.createdAt)) < 10000
       );
       if (localMsg) {
         const localEl = document.querySelector(`[data-message-id="${localMsg.id}"]`);
