@@ -1052,6 +1052,7 @@ ul, ol {
   gap: 0;
   flex-shrink: 0;
   safe-area-inset-bottom: env(safe-area-inset-bottom);
+  position: relative;
 }
 
 .message-options {
@@ -1804,11 +1805,11 @@ ul, ol {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-md);
   cursor: pointer;
-  min-width: 120px;
+  min-width: 140px;
   transition: background 0.2s;
 }
 
@@ -1820,8 +1821,9 @@ ul, ol {
   background: rgba(0, 212, 255, 0.15);
 }
 
-.voice-message .voice-icon {
-  font-size: 20px;
+.voice-message .voice-play-icon {
+  font-size: 22px;
+  flex-shrink: 0;
 }
 
 .voice-message .voice-waveform {
@@ -1829,6 +1831,7 @@ ul, ol {
   align-items: center;
   gap: 2px;
   height: 24px;
+  flex: 1;
 }
 
 .voice-message .wave-bar {
@@ -1836,31 +1839,71 @@ ul, ol {
   height: 8px;
   background: var(--accent-blue);
   border-radius: 2px;
-  animation: wave 0.5s ease-in-out infinite;
+  transition: height 0.2s;
+}
+
+.voice-message .voice-message-content.playing .wave-bar {
+  animation: wave 0.4s ease-in-out infinite;
 }
 
 .voice-message .wave-bar:nth-child(1) { animation-delay: 0s; }
-.voice-message .wave-bar:nth-child(2) { animation-delay: 0.1s; }
-.voice-message .wave-bar:nth-child(3) { animation-delay: 0.2s; }
-.voice-message .wave-bar:nth-child(4) { animation-delay: 0.3s; }
-.voice-message .wave-bar:nth-child(5) { animation-delay: 0.4s; }
-.voice-message .wave-bar:nth-child(6) { animation-delay: 0.5s; }
-.voice-message .wave-bar:nth-child(7) { animation-delay: 0.6s; }
-.voice-message .wave-bar:nth-child(8) { animation-delay: 0.7s; }
-
-.voice-message .voice-message-content.playing .wave-bar {
-  animation: wave 0.3s ease-in-out infinite;
-}
+.voice-message .wave-bar:nth-child(2) { animation-delay: 0.08s; }
+.voice-message .wave-bar:nth-child(3) { animation-delay: 0.16s; }
+.voice-message .wave-bar:nth-child(4) { animation-delay: 0.24s; }
+.voice-message .wave-bar:nth-child(5) { animation-delay: 0.32s; }
+.voice-message .wave-bar:nth-child(6) { animation-delay: 0.40s; }
+.voice-message .wave-bar:nth-child(7) { animation-delay: 0.48s; }
+.voice-message .wave-bar:nth-child(8) { animation-delay: 0.56s; }
 
 @keyframes wave {
-  0%, 100% { height: 6px; }
+  0%, 100% { height: 4px; }
   50% { height: 20px; }
 }
 
-.voice-message .voice-duration {
-  font-size: var(--font-xs);
-  color: var(--text-muted);
+.voice-message .voice-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   margin-left: auto;
+  flex-shrink: 0;
+}
+
+.voice-message .voice-duration {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-message .voice-transcribe-btn {
+  font-size: 10px;
+  color: var(--accent-blue);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(0, 212, 255, 0.1);
+  border: none;
+  white-space: nowrap;
+}
+
+.voice-message .voice-transcribe-btn:hover {
+  background: rgba(0, 212, 255, 0.25);
+}
+
+.voice-message .voice-transcript {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(100, 100, 255, 0.08);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  border-left: 2px solid var(--accent-blue);
+}
+
+.voice-message .voice-transcript.loading {
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 /* ==================== 图片消息 ==================== */
@@ -2002,18 +2045,6 @@ ul, ol {
 .file-message .file-info { flex: 1; overflow: hidden; }
 .file-message .file-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .file-message .file-size { font-size: var(--font-xs); color: var(--text-muted); }
-
-/* ==================== 语音消息样式 ==================== */
-.voice-message .voice-message-content { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg-tertiary); border-radius: var(--radius-md); cursor: pointer; min-width: 120px; transition: background 0.2s; }
-.voice-message .voice-message-content:hover { background: var(--border-color); }
-.voice-message .voice-message-content.playing { background: rgba(0,212,255,0.15); }
-.voice-message .voice-icon { font-size: 20px; }
-.voice-message .voice-waveform { display: flex; align-items: center; gap: 2px; height: 24px; }
-.voice-message .wave-bar { width: 3px; height: 8px; background: var(--accent-blue); border-radius: 2px; animation: wave 0.5s ease-in-out infinite; }
-.voice-message .wave-bar:nth-child(1){animation-delay:0s} .voice-message .wave-bar:nth-child(2){animation-delay:0.1s} .voice-message .wave-bar:nth-child(3){animation-delay:0.2s} .voice-message .wave-bar:nth-child(4){animation-delay:0.3s} .voice-message .wave-bar:nth-child(5){animation-delay:0.4s} .voice-message .wave-bar:nth-child(6){animation-delay:0.5s} .voice-message .wave-bar:nth-child(7){animation-delay:0.6s} .voice-message .wave-bar:nth-child(8){animation-delay:0.7s}
-.voice-message .voice-message-content.playing .wave-bar { animation: wave 0.3s ease-in-out infinite; }
-@keyframes wave { 0%,100%{height:6px;} 50%{height:20px;} }
-.voice-message .voice-duration { font-size: var(--font-xs); color: var(--text-muted); margin-left: auto; }
 
 /* ==================== 图片消息 ==================== */
 .message.image-message { padding: 8px; }
@@ -2267,31 +2298,73 @@ ul, ol {
 }
 
 /* ==================== 语音录制状态条 ==================== */
-.voice-recording-bar {
+.voice-recording-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 12px;
-  background: linear-gradient(90deg, rgba(255, 68, 68, 0.2), rgba(255, 68, 68, 0.1));
-  border: 1px solid #FF4444;
+  z-index: 50;
   border-radius: var(--radius-md);
-  margin: 8px;
-  color: #FF4444;
-  font-size: var(--font-sm);
 }
 
-.voice-dot {
-  width: 10px;
-  height: 10px;
+.recording-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.recording-pulse {
+  width: 60px; height: 60px;
   background: #FF4444;
   border-radius: 50%;
   animation: pulse-recording 1s ease-in-out infinite;
+  box-shadow: 0 0 20px rgba(255, 68, 68, 0.5);
 }
 
 @keyframes pulse-recording {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.8); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+.recording-time {
+  font-size: 28px;
+  font-weight: 700;
+  color: #FF4444;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+}
+
+.recording-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* 话筒按钮录音态 */
+.toolbar-btn.recording {
+  background: rgba(255, 68, 68, 0.3) !important;
+  border-color: #FF4444 !important;
+  animation: btn-pulse 1s ease-in-out infinite;
+}
+
+.toolbar-btn.recording .voice-btn-icon {
+  display: none;
+}
+
+.toolbar-btn.recording .voice-btn-timer {
+  display: inline !important;
+  color: #FF4444;
+  font-weight: 700;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes btn-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(255, 68, 68, 0); }
 }
 
 /* ==================== 开关控件 ==================== */
@@ -3378,36 +3451,6 @@ ul, ol {
 @keyframes pulse-recording {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.1); }
-}
-
-/* 语音录制UI */
-.voice-recording-bar {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 12px;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.voice-recording-bar .voice-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--accent-pink);
-  border-radius: 50%;
-  animation: blink 1s infinite;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
 }
 
 /* 匿踪提示 */

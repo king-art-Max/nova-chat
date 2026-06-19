@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-title" content="Nova-OS">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="application-name" content="Nova-OS">
-  <link rel="stylesheet" href="/css/style.css?v=202606192210">
+  <link rel="stylesheet" href="/css/style.css?v=202606192250">
 </head>
 <body>
   <!-- 星空背景 -->
@@ -405,7 +405,10 @@
           <button class="toolbar-btn" id="btn-emoji" title="表情">😊</button>
           <button class="toolbar-btn" id="btn-image" title="图片">🖼️</button>
           <button class="toolbar-btn" id="btn-file" title="文件">📎</button>
-          <button class="toolbar-btn" id="btn-voice" title="语音">🎙️</button>
+          <button class="toolbar-btn" id="btn-voice" title="语音">
+            <span class="voice-btn-icon">🎙️</span>
+            <span class="voice-btn-timer hidden" id="voice-btn-timer">0:00</span>
+          </button>
           <button class="toolbar-btn" id="btn-translate" title="翻译">🌐</button>
           <button class="toolbar-btn" id="btn-destroy" title="阅后即焚">🔥</button>
           <button class="toolbar-btn" id="btn-anonymous" title="匿踪">👁️</button>
@@ -475,11 +478,13 @@
         <input type="file" id="file-input" style="display:none;">
         <!-- 隐藏的图片输入 -->
         <input type="file" id="image-input" accept="image/*" style="display:none;">
-        <!-- 语音录制计时 -->
-        <div class="voice-recording-bar hidden" id="voice-timer">
-          <span class="voice-dot"></span>
-          <span>录音中 </span><span id="voice-duration">0:00</span>
-          <span>点击停止</span>
+        <!-- 语音录制覆盖层 -->
+        <div class="voice-recording-overlay hidden" id="voice-recording-overlay">
+          <div class="recording-indicator">
+            <div class="recording-pulse"></div>
+            <span class="recording-time" id="recording-time">0:00</span>
+            <span class="recording-hint">再次点击话筒结束录音并发送</span>
+          </div>
         </div>
         <!-- 输入框区域 -->
         <div class="input-row">
@@ -908,13 +913,13 @@
 
   <!-- 脚本加载 -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/crypto.js?v=202606192210"></script>
-  <script src="/js/ui.js?v=202606192210"></script>
-  <script src="/js/auth.js?v=202606192210"></script>
-  <script src="/js/chat.js?v=202606192210"></script>
-  <script src="/js/ai.js?v=202606192210"></script>
-  <script src="/js/wallet.js?v=202606192210"></script>
-  <script src="/js/pwa.js?v=202606192210"></script>
-  <script src="/js/app.js?v=202606192210"></script>
+  <script src="/js/crypto.js?v=202606192250"></script>
+  <script src="/js/ui.js?v=202606192250"></script>
+  <script src="/js/auth.js?v=202606192250"></script>
+  <script src="/js/chat.js?v=202606192250"></script>
+  <script src="/js/ai.js?v=202606192250"></script>
+  <script src="/js/wallet.js?v=202606192250"></script>
+  <script src="/js/pwa.js?v=202606192250"></script>
+  <script src="/js/app.js?v=202606192250"></script>
 </body>
 </html>

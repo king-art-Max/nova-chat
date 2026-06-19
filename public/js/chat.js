@@ -201,12 +201,6 @@ const Chat = {
     // 绑定阅后即焚选项
     this.bindBurnOptions();
     
-    // 绑定语音录制停止
-    const voiceTimer = document.getElementById('voice-timer');
-    if (voiceTimer) {
-      voiceTimer.addEventListener('click', () => this.stopRecording());
-    }
-    
     // 滚动到底部按钮
     document.getElementById('btn-scroll-bottom')?.addEventListener('click', () => {
       this.scrollToBottom();
@@ -986,23 +980,29 @@ const Chat = {
     } else if (isImage) {
       messageHTML += `<div class="message-content"><img src="${content}" class="chat-image" data-preview="true"></div>`;
     } else if (message.type === 'voice') {
-      // 语音消息渲染 — 使用data属性+事件委托，避免base64嵌入onclick
+      // 语音消息渲染 — 播放按钮+波形+时长+转文字
       let duration = 0;
       let audioSrc = '';
+      let transcript = '';
       try {
         const parsed = JSON.parse(raw);
         duration = parsed.duration || 0;
         audioSrc = parsed.content || '';
+        transcript = parsed.transcript || '';
       } catch(e) {
-        // raw就是base64本身
         audioSrc = content || '';
       }
       const voiceMsgId = 'voice-' + (message.id || Date.now());
+      const durationStr = duration > 0 ? this.formatVoiceDuration(duration) : '0:00';
+      const transcriptHTML = transcript ? `<div class="voice-transcript">${UI.escapeHtml(transcript)}</div>` : '';
       messageHTML += `<div class="message-content voice-message"><div class="voice-message-content" id="${voiceMsgId}" data-audio-src="${audioSrc ? '1' : ''}">
-        <span class="voice-icon">🎤</span>
+        <span class="voice-play-icon">▶️</span>
         <div class="voice-waveform"><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span></div>
-        <span class="voice-duration">${duration}秒</span>
-      </div></div>`;
+        <div class="voice-meta">
+          <span class="voice-duration">${durationStr}</span>
+          <button class="voice-transcribe-btn" data-voice-id="${voiceMsgId}">${transcript ? '📝' : '转文字'}</button>
+        </div>
+      </div>${transcriptHTML}</div>`;
     } else if (message.type === 'file') {
       // 文件消息渲染 — 使用data属性+事件委托，避免XSS
       let fileName = '文件', fileSize = '';
@@ -1072,7 +1072,7 @@ const Chat = {
     
     messagesEl.appendChild(messageEl);
     
-    // 语音消息音频数据存储+播放事件绑定（避免base64嵌入HTML属性）
+    // 语音消息：音频存储+播放+转文字事件绑定
     if (message.type === 'voice') {
       let audioSrc = '';
       try {
@@ -1083,12 +1083,28 @@ const Chat = {
       }
       const voiceEl = document.getElementById('voice-' + (message.id || ''));
       if (voiceEl && audioSrc) {
-        // 存储音频数据到内存映射
         if (!this._voiceAudioMap) this._voiceAudioMap = {};
         this._voiceAudioMap[voiceEl.id] = audioSrc;
-        voiceEl.addEventListener('click', () => {
+        // 点击播放/暂停（排除转文字按钮）
+        voiceEl.addEventListener('click', (e) => {
+          if (e.target.closest('.voice-transcribe-btn')) return;
           const src = Chat._voiceAudioMap && Chat._voiceAudioMap[voiceEl.id];
           if (src) Chat.togglePlayVoice(voiceEl, src);
+        });
+      }
+      // 转文字按钮
+      const transcribeBtn = messageEl.querySelector('.voice-transcribe-btn');
+      if (transcribeBtn) {
+        transcribeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          // 如果已有转写内容，切换显示/隐藏
+          const existingTranscript = messageEl.querySelector('.voice-transcript');
+          if (existingTranscript) {
+            existingTranscript.style.display = existingTranscript.style.display === 'none' ? '' : 'none';
+            return;
+          }
+          // 没有转写内容，提示
+          UI.showToast('该语音未携带转写内容（仅录音时支持实时转写）');
         });
       }
     }
@@ -1517,54 +1533,151 @@ const Chat = {
     this.displayMessage(localMessage, true);
     document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
   },
-  async toggleVoiceRecording() { if (this.isRecording) this.stopRecording(); else this.startRecording(); },
+  async toggleVoiceRecording() {
+    if (this.isRecording) {
+      this.stopRecording();
+    } else {
+      this.startRecording();
+    }
+  },
   async startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({audio: true});
       this.audioChunks = [];
       this.mediaRecorder = new MediaRecorder(stream);
-      this.mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) this.audioChunks.push(e.data); };
-      this.mediaRecorder.onstop = () => { const blob = new Blob(this.audioChunks, {type: 'audio/webm'}); this.audioChunks = []; this._pendingVoiceBlob = blob; this.sendVoiceMessage(); stream.getTracks().forEach(t => t.stop()); };
+      this.mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) this.audioChunks.push(e.data);
+      };
+      this.mediaRecorder.onstop = () => {
+        const blob = new Blob(this.audioChunks, {type: 'audio/webm'});
+        this.audioChunks = [];
+        const duration = this._lastRecordingDuration || 0;
+        const transcript = this._lastRecordingTranscript || '';
+        stream.getTracks().forEach(t => t.stop());
+        if (duration < 1) {
+          UI.showToast('录音时间太短');
+          return;
+        }
+        this.sendVoiceMessage(blob, duration, transcript);
+      };
       this.mediaRecorder.start();
       this.isRecording = true;
       this.recordingSeconds = 0;
+      this._recordingTranscript = '';
+      // 话筒按钮变录音态
       const voiceBtn = document.getElementById('btn-voice');
       if (voiceBtn) voiceBtn.classList.add('recording');
-      // 显示录音计时器
-      const timerEl = document.getElementById('voice-timer');
-      const durationEl = document.getElementById('voice-duration');
-      if (timerEl) { timerEl.classList.remove('hidden'); }
-      if (durationEl) durationEl.textContent = '0:00';
+      const voiceTimer = document.getElementById('voice-btn-timer');
+      if (voiceTimer) { voiceTimer.classList.remove('hidden'); voiceTimer.textContent = '0:00'; }
+      // 显示录音覆盖层
+      const overlay = document.getElementById('voice-recording-overlay');
+      if (overlay) overlay.classList.remove('hidden');
+      const recTime = document.getElementById('recording-time');
+      if (recTime) recTime.textContent = '0:00';
+      // 计时
       this.recordingTimer = setInterval(() => {
         this.recordingSeconds++;
-        if (this.recordingSeconds >= 60) { this.stopRecording(); UI.showToast('录音已达60秒上限'); }
-        const dEl = document.getElementById('voice-duration');
-        if (dEl) dEl.textContent = this.formatTime(this.recordingSeconds);
+        const timeStr = this.formatVoiceDuration(this.recordingSeconds);
+        if (voiceTimer) voiceTimer.textContent = timeStr;
+        if (recTime) recTime.textContent = timeStr;
+        if (this.recordingSeconds >= 120) {
+          this.stopRecording();
+          UI.showToast('录音已达2分钟上限');
+        }
       }, 1000);
-    } catch (error) { console.error('录音启动失败:', error); UI.showToast('无法访问麦克风'); }
+      // 同步启动语音识别（录音时实时转写）
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        this._speechRecognition = new SpeechRecognition();
+        this._speechRecognition.lang = 'zh-CN';
+        this._speechRecognition.continuous = true;
+        this._speechRecognition.interimResults = true;
+        this._speechRecognition.onresult = (event) => {
+          let final = '';
+          for (let i = 0; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+              final += event.results[i][0].transcript;
+            }
+          }
+          if (final) this._recordingTranscript = final;
+        };
+        this._speechRecognition.onerror = () => {};
+        this._speechRecognition.onend = () => {
+          // 如果还在录音，自动重启识别（浏览器会自动断开）
+          if (this.isRecording) {
+            try { this._speechRecognition.start(); } catch(e) {}
+          }
+        };
+        try { this._speechRecognition.start(); } catch(e) {}
+      }
+    } catch (error) {
+      console.error('录音启动失败:', error);
+      UI.showToast('无法访问麦克风，请检查权限设置');
+    }
   },
   stopRecording() {
     if (this.mediaRecorder && this.isRecording) {
+      this._lastRecordingDuration = this.recordingSeconds;
+      this._lastRecordingTranscript = this._recordingTranscript || '';
       this.mediaRecorder.stop();
       this.isRecording = false;
       clearInterval(this.recordingTimer);
+      // 停止语音识别
+      if (this._speechRecognition) {
+        try { this._speechRecognition.stop(); } catch(e) {}
+        this._speechRecognition = null;
+      }
+      // 恢复话筒按钮
       const voiceBtn = document.getElementById('btn-voice');
       if (voiceBtn) voiceBtn.classList.remove('recording');
-      const timerEl = document.getElementById('voice-timer');
-      if (timerEl) { timerEl.classList.add('hidden'); }
+      const voiceTimer = document.getElementById('voice-btn-timer');
+      if (voiceTimer) voiceTimer.classList.add('hidden');
+      // 隐藏录音覆盖层
+      const overlay = document.getElementById('voice-recording-overlay');
+      if (overlay) overlay.classList.add('hidden');
     }
   },
-  formatTime(seconds) { const m = Math.floor(seconds / 60); const s = seconds % 60; return m + ':' + (s < 10 ? '0' : '') + s; },
-  async sendVoiceMessage(blob) {
+  formatVoiceDuration(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  },
+  async sendVoiceMessage(blob, duration, transcript) {
     if (!this.currentChat) return;
     const reader = new FileReader();
     reader.onload = async (e) => {
       const base64 = e.target.result;
-      const duration = this.recordingSeconds;
-      const content = JSON.stringify({type: 'voice', duration, content: base64});
-      const message = {chatId: this.currentChat.id, senderId: Auth.getCurrentUserId(), encryptedContent: content, type: 'voice', ttl: null, burnAfter: this.burnMode ? this.burnSeconds : 0, isAnonymous: this.anonymousMode};
-      try { await fetch('/api/chats/' + message.chatId + '/messages', {method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.getToken()}, body: JSON.stringify(message)}); } catch(e) { UI.showToast('发送语音失败'); return; }
-      const localMessage = {id: 'local-' + Date.now(), chatId: message.chatId, senderId: Auth.getCurrentUserId(), galNumber: Auth.currentUser?.galNumber || '', nickname: Auth.currentUser?.nickname || '', encryptedContent: content, type: 'voice', metadata: {duration}, createdAt: new Date().toISOString()};
+      const content = JSON.stringify({type: 'voice', duration, content: base64, transcript: transcript || ''});
+      const message = {
+        chatId: this.currentChat.id,
+        senderId: Auth.getCurrentUserId(),
+        encryptedContent: content,
+        type: 'voice',
+        ttl: null,
+        burnAfter: this.burnMode ? this.burnSeconds : 0,
+        isAnonymous: this.anonymousMode
+      };
+      try {
+        await fetch('/api/chats/' + message.chatId + '/messages', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.getToken()},
+          body: JSON.stringify(message)
+        });
+      } catch(e) {
+        UI.showToast('发送语音失败');
+        return;
+      }
+      const localMessage = {
+        id: 'local-' + Date.now(),
+        chatId: message.chatId,
+        senderId: Auth.getCurrentUserId(),
+        galNumber: Auth.currentUser?.galNumber || '',
+        nickname: Auth.currentUser?.nickname || '',
+        encryptedContent: content,
+        type: 'voice',
+        metadata: {duration},
+        createdAt: new Date().toISOString()
+      };
       if (!this.chatMessages[message.chatId]) this.chatMessages[message.chatId] = [];
       this.chatMessages[message.chatId].push(localMessage);
       this.displayMessage(localMessage, true);
@@ -1573,15 +1686,27 @@ const Chat = {
     reader.readAsDataURL(blob);
   },
   togglePlayVoice(element, audioUrl) {
+    const playIcon = element.querySelector('.voice-play-icon');
     const existing = element.querySelector('audio');
-    if (existing) { if (existing.paused) { existing.play(); element.classList.add('playing'); } else { existing.pause(); element.classList.remove('playing'); } return; }
+    if (existing) {
+      if (existing.paused) {
+        existing.play();
+        element.classList.add('playing');
+        if (playIcon) playIcon.textContent = '⏸️';
+      } else {
+        existing.pause();
+        element.classList.remove('playing');
+        if (playIcon) playIcon.textContent = '▶️';
+      }
+      return;
+    }
     const audio = document.createElement('audio');
     audio.src = audioUrl;
-    audio.onended = () => element.classList.remove('playing');
+    audio.onplay = () => { element.classList.add('playing'); if (playIcon) playIcon.textContent = '⏸️'; };
+    audio.onended = () => { element.classList.remove('playing'); if (playIcon) playIcon.textContent = '▶️'; };
     audio.onerror = () => UI.showToast('音频播放失败');
     element.appendChild(audio);
     audio.play();
-    element.classList.add('playing');
   },
   formatFileSize(bytes) { if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / (1024 * 1024)).toFixed(1) + ' MB'; },
   handleMessageBurned(data) {
