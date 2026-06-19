@@ -437,8 +437,10 @@ async function startServer() {
         encryptedContent: m.encrypted_content,
         type: m.type,
         ttl: m.ttl,
+        burnAfter: m.burn_after || 0,
         isRecalled: m.is_recalled,
         readBy: m.read_by,
+        isAnonymous: m.is_anonymous || false,
         createdAt: m.created_at
       }));
       res.json({ success: true, messages });
@@ -985,6 +987,8 @@ async function triggerAICompanyReply(chatId, senderId, encryptedContent, message
             avatar: aiMember.avatar || 'robot',
             encryptedContent: aiMessageContent,
             type: 'normal',
+            ttl: null,
+            burnAfter: 0,
             isAnonymous: false,
             isRecalled: false,
             createdAt: new Date().toISOString()
