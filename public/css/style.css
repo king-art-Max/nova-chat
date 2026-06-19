@@ -3419,6 +3419,15 @@ ul, ol {
   color: var(--accent-orange);
 }
 
+.burn-cancel {
+  background: rgba(255, 68, 68, 0.1) !important;
+  color: #ff6b6b !important;
+  border-color: transparent !important;
+}
+.burn-cancel:hover {
+  background: rgba(255, 68, 68, 0.2) !important;
+}
+
 /* 工具栏按钮增强 */
 .toolbar-btn {
   min-width: 44px;
@@ -3471,6 +3480,11 @@ ul, ol {
   color: var(--accent-orange);
   font-size: 12px;
   text-align: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+#destroy-timer:hover {
+  background: rgba(255, 165, 0, 0.25);
 }
 
 /* 移动端适配 */

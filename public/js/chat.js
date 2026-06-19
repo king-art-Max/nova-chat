@@ -139,6 +139,15 @@ const Chat = {
     const destroyBtn = document.getElementById('btn-destroy');
     if (destroyBtn) destroyBtn.addEventListener('click', () => this.toggleBurnPanel());
     
+    // destroy-timer 提示条可点击取消阅后即焚
+    const destroyTimer = document.getElementById('destroy-timer');
+    if (destroyTimer) destroyTimer.addEventListener('click', () => {
+      if (this.burnMode) {
+        this.disableBurnMode();
+        UI.showToast('阅后即焚已关闭');
+      }
+    });
+    
     const anonymousBtn = document.getElementById('btn-anonymous');
     if (anonymousBtn) anonymousBtn.addEventListener('click', () => this.toggleAnonymousMode());
     
@@ -294,13 +303,27 @@ const Chat = {
   bindBurnOptions() {
     document.querySelectorAll('#burn-panel .burn-btn').forEach(btn => {
       btn.addEventListener('click', () => {
+        const seconds = parseInt(btn.dataset.seconds);
+        // 取消按钮：关闭阅后即焚
+        if (seconds === 0) {
+          this.disableBurnMode();
+          UI.showToast('阅后即焚已关闭');
+          return;
+        }
         document.querySelectorAll('#burn-panel .burn-btn').forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
-        this.burnSeconds = parseInt(btn.dataset.seconds) || 30;
+        this.burnSeconds = seconds;
         this.burnMode = true;
         const destroyBtn = document.getElementById('btn-destroy');
         if (destroyBtn) destroyBtn.classList.add('active');
+        // 显示倒计时提示
+        const timer = document.getElementById('destroy-timer');
+        if (timer) {
+          timer.classList.remove('hidden');
+          timer.textContent = `🔥 ${seconds}秒后自动销毁 · 点击取消`;
+        }
         this.closeAllPanels();
+        UI.showToast('阅后即焚已开启 (' + seconds + '秒)');
       });
     });
   },
@@ -1421,6 +1444,12 @@ const Chat = {
     if (!isVisible) panel.classList.remove('hidden');
   },
   toggleBurnPanel() {
+    // 如果阅后即焚已开启，再次点击直接关闭
+    if (this.burnMode) {
+      this.disableBurnMode();
+      UI.showToast('阅后即焚已关闭');
+      return;
+    }
     const panel = document.getElementById('burn-panel');
     if (!panel) return;
     const isVisible = !panel.classList.contains('hidden');
@@ -1473,7 +1502,11 @@ const Chat = {
   disableBurnMode() {
     this.burnMode = false;
     const burnBtn = document.getElementById('btn-destroy');
+    const destroyTimer = document.getElementById('destroy-timer');
     if (burnBtn) burnBtn.classList.remove('active');
+    if (destroyTimer) destroyTimer.classList.add('hidden');
+    // 清除面板中的选中状态
+    document.querySelectorAll('#burn-panel .burn-btn').forEach(b => b.classList.remove('selected'));
     this.closeAllPanels();
   },
   async translateMessage(messageId, text) {
@@ -1954,6 +1987,7 @@ const Chat = {
     try { this.sendStopTyping(); } catch(e) {}
     if (isDestroy) {
       try {
+        this.burnMode = false;
         const btnDestroy = document.getElementById('btn-destroy');
         const destroyTimer = document.getElementById('destroy-timer');
         if (btnDestroy) btnDestroy.classList.remove('active');
@@ -2739,12 +2773,12 @@ Object.assign(Chat, {
     }
     this.closeAllPanels();
     
-    // 显示倒计时
+    // 显示倒计时提示（可点击取消）
     const timer = document.getElementById('destroy-timer');
     if (timer) {
       timer.classList.remove('hidden');
       timer.dataset.ttl = seconds;
-      timer.textContent = `🔥 ${seconds}秒后自动销毁`;
+      timer.textContent = `🔥 ${seconds}秒后自动销毁 · 点击取消`;
     }
   },
   
