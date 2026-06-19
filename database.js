@@ -101,6 +101,7 @@ async function initPostgres() {
     name VARCHAR(50) NOT NULL,
     avatar VARCHAR(50) DEFAULT 'robot',
     system_prompt TEXT NOT NULL,
+    category VARCHAR(20) DEFAULT 'basic',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -264,6 +265,7 @@ async function initSqlite() {
     name TEXT NOT NULL,
     avatar TEXT DEFAULT 'robot',
     system_prompt TEXT NOT NULL,
+    category TEXT DEFAULT 'basic',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -400,24 +402,28 @@ async function initAIPersonas() {
       gal_number: 'AI-NOVA000001',
       name: 'Nova助手',
       avatar: 'robot',
+      category: 'basic',
       system_prompt: '你是Nova助手，一个友善且高效的AI助手。用简洁、有帮助的语言回答问题。'
     },
     {
       gal_number: 'AI-TOXIC00002',
       name: '毒舌评论员',
       avatar: 'devil',
+      category: 'basic',
       system_prompt: '你是毒舌评论员，说话犀利、一针见血，善于吐槽和调侃，但不失幽默感。'
     },
     {
       gal_number: 'AI-EMOTI00003',
       name: '情感树洞',
       avatar: 'heart',
+      category: 'basic',
       system_prompt: '你是情感树洞，温柔、善解人意，擅长倾听和给予情感支持。'
     },
     {
       gal_number: 'AI-DATA000004',
       name: '数据分析师',
       avatar: 'chart',
+      category: 'basic',
       system_prompt: '你是数据分析师，专业、严谨，擅长用数据和逻辑分析问题。回答要精确、有条理。'
     }
   ];
@@ -426,13 +432,13 @@ async function initAIPersonas() {
     try {
       if (isProduction) {
         await pool.query(
-          'INSERT INTO ai_personas (gal_number, name, avatar, system_prompt) VALUES ($1, $2, $3, $4) ON CONFLICT (gal_number) DO NOTHING',
-          [persona.gal_number, persona.name, persona.avatar, persona.system_prompt]
+          'INSERT INTO ai_personas (gal_number, name, avatar, system_prompt, category) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (gal_number) DO NOTHING',
+          [persona.gal_number, persona.name, persona.avatar, persona.system_prompt, persona.category || 'basic']
         );
       } else {
         sqlDb.run(
-          'INSERT OR IGNORE INTO ai_personas (gal_number, name, avatar, system_prompt) VALUES (?, ?, ?, ?)',
-          [persona.gal_number, persona.name, persona.avatar, persona.system_prompt]
+          'INSERT OR IGNORE INTO ai_personas (gal_number, name, avatar, system_prompt, category) VALUES (?, ?, ?, ?, ?)',
+          [persona.gal_number, persona.name, persona.avatar, persona.system_prompt, persona.category || 'basic']
         );
       }
     } catch (e) {
@@ -1292,6 +1298,15 @@ async function createAdditionalTables() {
   
   // chat_members表新增字段
   try { await pool.query(`ALTER TABLE chat_members ADD COLUMN IF NOT EXISTS is_muted BOOLEAN DEFAULT FALSE`); } catch(e) { console.warn('chat_members.is_muted列添加失败:', e.message); }
+  
+  // ai_personas表新增category字段
+  try { await pool.query(`ALTER TABLE ai_personas ADD COLUMN IF NOT EXISTS category VARCHAR(20) DEFAULT 'basic'`); } catch(e) { console.warn('ai_personas.category列添加失败:', e.message); }
+  
+  // 更新已有数据：4个基础AI标记为basic，7个公司岗位标记为company
+  try {
+    await pool.query(`UPDATE ai_personas SET category = 'basic' WHERE gal_number IN ('AI-NOVA000001', 'AI-TOXIC00002', 'AI-EMOTI00003', 'AI-DATA000004')`);
+    await pool.query(`UPDATE ai_personas SET category = 'company' WHERE gal_number LIKE 'AI-CEO%' OR gal_number LIKE 'AI-CFO%' OR gal_number LIKE 'AI-COO%' OR gal_number LIKE 'AI-CMO%' OR gal_number LIKE 'AI-CTO%' OR gal_number LIKE 'AI-LAW%' OR gal_number LIKE 'AI-AUD%'`);
+  } catch(e) { console.warn('ai_personas.category更新失败:', e.message); }
 }
 
 // ==================== SQLite新增表 ====================
@@ -1316,6 +1331,8 @@ async function createAdditionalTablesSQLite() {
   try { sqlDb.run('ALTER TABLE messages ADD COLUMN burned_at TEXT'); } catch(e) {}
   try { sqlDb.run('ALTER TABLE messages ADD COLUMN is_anonymous INTEGER DEFAULT 0'); } catch(e) {}
   try { sqlDb.run('ALTER TABLE chat_members ADD COLUMN is_muted INTEGER DEFAULT 0'); } catch(e) {}
+  // ai_personas表新增category字段
+  try { sqlDb.run("ALTER TABLE ai_personas ADD COLUMN category TEXT DEFAULT 'basic'"); } catch(e) {}
 }
 
 // 修改initDatabase函数末尾添加新表创建
@@ -1337,43 +1354,71 @@ const AI_COMPANY_PERSONAS = [
     gal_number: 'AI-CEO000005',
     name: '总经理',
     avatar: 'robot',
+    category: 'company',
     system_prompt: `你是公司的总经理。你负责公司的战略决策和日常管理。在会议中，你主持讨论，分配任务，听取汇报后做出决策。说话风格：沉稳、有条理、有决断力。每次发言控制在100字以内。`
   },
   {
     gal_number: 'AI-CFO000006',
     name: '财务总监',
     avatar: 'chart',
+    category: 'company',
     system_prompt: `你是公司的财务总监。你负责财务分析、预算管理和投资决策。在汇报时提供具体的财务数据和趋势分析。说话风格：严谨、数据驱动、注重ROI。每次发言控制在100字以内。`
   },
   {
     gal_number: 'AI-COO000007',
     name: '运营总监',
     avatar: 'robot',
+    category: 'company',
     system_prompt: `你是公司的运营总监。你负责运营策略、流程优化和团队管理。汇报运营KPI和改进方案。说话风格：务实、高效、结果导向。每次发言控制在100字以内。`
   },
   {
     gal_number: 'AI-CMO000008',
     name: '市场总监',
     avatar: 'heart',
+    category: 'company',
     system_prompt: `你是公司的市场总监。你负责市场推广、品牌策略和用户增长。汇报市场动态和营销效果。说话风格：有创意、洞察力强、善于讲故事。每次发言控制在100字以内。`
   },
   {
     gal_number: 'AI-CTO000009',
     name: '技术总监',
     avatar: 'robot',
+    category: 'company',
     system_prompt: `你是公司的技术总监。你负责技术方案、架构决策和研发管理。汇报技术进展和技术风险。说话风格：技术权威、前瞻性、注重可落地性。每次发言控制在100字以内。`
   },
   {
     gal_number: 'AI-LAW000010',
     name: '法务顾问',
     avatar: 'robot',
+    category: 'company',
     system_prompt: `你是公司的法务顾问。你负责法律合规、合同审查和风险评估。在会议中提供法律意见和风险提示。说话风格：严谨、专业、审慎。每次发言控制在80字以内。`
   },
   {
     gal_number: 'AI-AUD000011',
     name: '监督官',
     avatar: 'robot',
+    category: 'company',
     system_prompt: `你是公司的独立监督官。你的职责是监督各部门工作质量，发现问题并提出改进建议。你不属于任何部门，直接向总经理负责。在会议最后发言，客观评价各部门表现。说话风格：犀利、公正、一针见血。每次发言控制在100字以内。`
+  },
+  {
+    gal_number: 'AI-CRE000012',
+    name: '创意总监',
+    avatar: 'robot',
+    category: 'company',
+    system_prompt: `你是公司的创意总监。你负责品牌视觉设计、海报制作、PPT设计和所有创意视觉内容。当用户需要做图、做海报、做PPT时，你负责理解需求并生成图片描述或设计建议。说话风格：富有想象力、审美在线、善于用视觉语言表达。每次发言控制在100字以内。`
+  },
+  {
+    gal_number: 'AI-MED000013',
+    name: '新媒体运营',
+    avatar: 'robot',
+    category: 'company',
+    system_prompt: `你是公司的新媒体运营。你负责短视频策划、内容运营、社交媒体管理。擅长撰写短视频脚本、策划传播方案、分析热点趋势。说话风格：紧跟潮流、网感强、执行力强。每次发言控制在100字以内。`
+  },
+  {
+    gal_number: 'AI-SRV000014',
+    name: '客服主管',
+    avatar: 'robot',
+    category: 'company',
+    system_prompt: `你是公司的客服主管。你负责7×24小时客户服务，问题分类、工单转派和常见FAQ解答。遇到技术问题转给技术总监，投诉问题转给法务，付款问题转给财务。说话风格：亲切、耐心、专业、高效。每次发言控制在100字以内。`
   }
 ];
 
@@ -1381,10 +1426,17 @@ const AI_COMPANY_PERSONAS = [
 async function initAICompanyPersonas() {
   for (const persona of AI_COMPANY_PERSONAS) {
     try {
-      await runSql(
-        'INSERT INTO ai_personas (gal_number, name, avatar, system_prompt) VALUES (?, ?, ?, ?)',
-        [persona.gal_number, persona.name, persona.avatar, persona.system_prompt]
-      );
+      if (isProduction) {
+        await pool.query(
+          'INSERT INTO ai_personas (gal_number, name, avatar, system_prompt, category) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (gal_number) DO NOTHING',
+          [persona.gal_number, persona.name, persona.avatar, persona.system_prompt, persona.category || 'company']
+        );
+      } else {
+        await runSql(
+          'INSERT OR IGNORE INTO ai_personas (gal_number, name, avatar, system_prompt, category) VALUES (?, ?, ?, ?, ?)',
+          [persona.gal_number, persona.name, persona.avatar, persona.system_prompt, persona.category || 'company']
+        );
+      }
     } catch (e) {
       // 忽略重复插入错误
     }

@@ -1656,11 +1656,77 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==================== AI公司群组功能 ====================
 const AICompany = {
   currentChatId: null,
+  companyPersonas: null, // 缓存公司岗位列表
+  
+  // 岗位头像映射
+  roleAvatars: {
+    'AI-CEO000005': '👔',
+    'AI-CFO000006': '💰',
+    'AI-COO000007': '💼',
+    'AI-CMO000008': '📊',
+    'AI-CTO000009': '💻',
+    'AI-LAW000010': '⚖️',
+    'AI-AUD000011': '🔍',
+    'AI-CRE000012': '🎨',
+    'AI-MED000013': '🎬',
+    'AI-SRV000014': '🎧'
+  },
+  
+  /**
+   * 从API加载公司岗位列表并渲染
+   */
+  async loadCompanyRoles() {
+    if (this.companyPersonas) return; // 已缓存不重复加载
+    try {
+      const response = await fetch('/api/ai/company-personas');
+      const data = await response.json();
+      if (data.success) {
+        this.companyPersonas = data.personas;
+        this.renderCompanyRoles();
+      }
+    } catch (e) {
+      console.error('加载公司岗位失败:', e);
+    }
+  },
+  
+  /**
+   * 渲染公司岗位选择网格
+   */
+  renderCompanyRoles() {
+    const grid = document.getElementById('company-roles-grid');
+    if (!grid || !this.companyPersonas) return;
+    
+    grid.innerHTML = this.companyPersonas.map(p => {
+      const icon = this.roleAvatars[p.galNumber] || '🤖';
+      return `
+        <label class="ai-role-option checked">
+          <input type="checkbox" name="ai-role" value="${p.galNumber}" checked>
+          <div class="ai-role-card">
+            <span class="ai-role-icon">${icon}</span>
+            <span class="ai-role-name">${UI.escapeHtml(p.name)}</span>
+          </div>
+        </label>
+      `;
+    }).join('');
+    
+    // 绑定点击事件同步checked样式
+    grid.querySelectorAll('.ai-role-option').forEach(label => {
+      label.addEventListener('click', () => {
+        const checkbox = label.querySelector('input[name="ai-role"]');
+        if (checkbox) {
+          requestAnimationFrame(() => {
+            label.classList.toggle('checked', checkbox.checked);
+          });
+        }
+      });
+    });
+  },
   
   /**
    * 显示创建AI公司弹窗
    */
-  showCreateModal() {
+  async showCreateModal() {
+    await this.loadCompanyRoles(); // 确保岗位已加载
     document.getElementById('ai-company-modal').classList.remove('hidden');
     // 重置表单
     document.getElementById('ai-company-name').value = '';
@@ -1877,7 +1943,10 @@ const AICompany = {
       'AI-CMO000008': '📊',
       'AI-CTO000009': '💻',
       'AI-LAW000010': '⚖️',
-      'AI-AUD000011': '🔍'
+      'AI-AUD000011': '🔍',
+      'AI-CRE000012': '🎨',
+      'AI-MED000013': '🎬',
+      'AI-SRV000014': '🎧'
     };
     return avatars[galNumber] || '🤖';
   }

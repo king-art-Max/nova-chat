@@ -678,12 +678,28 @@ async function startServer() {
 
   app.get('/api/ai/personas', async (req, res) => {
     try {
-      const personas = (await db.getAIPersonas()).map(p => ({
+      // AI助手页面只显示basic类别的AI人格
+      const personas = (await db.getAIPersonas()).filter(p => p.category === 'basic').map(p => ({
         id: p.id,
         galNumber: p.gal_number,
         name: p.name,
         avatar: p.avatar,
         systemPrompt: p.system_prompt
+      }));
+      res.json({ success: true, personas });
+    } catch (error) {
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+
+  // AI公司岗位列表（创建AI公司群时使用）
+  app.get('/api/ai/company-personas', async (req, res) => {
+    try {
+      const personas = (await db.getAIPersonas()).filter(p => p.category === 'company').map(p => ({
+        id: p.id,
+        galNumber: p.gal_number,
+        name: p.name,
+        avatar: p.avatar
       }));
       res.json({ success: true, personas });
     } catch (error) {
@@ -1317,6 +1333,9 @@ function getAICompanyFallbackReply(galNumber, userMessage) {
     const cto = aiMembers.find(m => m.gal_number === 'AI-CTO000009');
     const law = aiMembers.find(m => m.gal_number === 'AI-LAW000010');
     const aud = aiMembers.find(m => m.gal_number === 'AI-AUD000011');
+    const cre = aiMembers.find(m => m.gal_number === 'AI-CRE000012');
+    const med = aiMembers.find(m => m.gal_number === 'AI-MED000013');
+    const srv = aiMembers.find(m => m.gal_number === 'AI-SRV000014');
     
     const messages = [];
     
@@ -1371,6 +1390,33 @@ function getAICompanyFallbackReply(galNumber, userMessage) {
         sender: law.name,
         galNumber: law.gal_number,
         content: `${law.name}提示：近期需关注数据合规要求，建议进行合规审查。`
+      });
+    }
+    
+    // 创意总监汇报
+    if (cre) {
+      messages.push({
+        sender: cre.name,
+        galNumber: cre.gal_number,
+        content: `${cre.name}汇报：本月完成品牌视觉升级方案，设计海报12张，PPT模板3套。建议加大短视频内容投入，视觉统一性需要持续优化。`
+      });
+    }
+    
+    // 新媒体运营汇报
+    if (med) {
+      messages.push({
+        sender: med.name,
+        galNumber: med.gal_number,
+        content: `${med.name}汇报：短视频账号粉丝增长40%，爆款内容3条。建议下周推出系列化内容，提升用户粘性和转化率。`
+      });
+    }
+    
+    // 客服主管汇报
+    if (srv) {
+      messages.push({
+        sender: srv.name,
+        galNumber: srv.gal_number,
+        content: `${srv.name}汇报：本月客服响应时间缩短30%，用户满意度95%。常见问题FAQ覆盖率提升至80%，建议持续优化自助服务流程。`
       });
     }
     
