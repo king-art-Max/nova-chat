@@ -3798,7 +3798,7 @@ Object.assign(Chat, {
     
     if (chatIds.length === 0) {
       try {
-        const response = await fetch("/api/chats", {
+        const response = await fetch(`/api/chats?userId=${Auth.getCurrentUserId()}`, {
           headers: { "Authorization": "Bearer " + Auth.getToken() }
         });
         const data = await response.json();
