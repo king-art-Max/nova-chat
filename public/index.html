@@ -8,10 +8,35 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Nova-OS 星尘聊天</title>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-  <link rel="stylesheet" href="/css/style.css?v=202606191005">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/assets/icon-192.png">
+  <meta name="apple-mobile-web-app-title" content="Nova-OS">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="Nova-OS">
+  <link rel="stylesheet" href="/css/style.css?v=202606191100">
 </head>
 <body>
   <!-- 星空背景 -->
+  <!-- PWA安装横幅 -->
+  <div id="pwa-install-banner" class="pwa-banner hidden">
+    <div class="pwa-banner-icon">
+      <svg viewBox="0 0 100 100" width="36" height="36">
+        <defs><linearGradient id="pwa-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#00d4ff"/>
+          <stop offset="100%" style="stop-color:#7b2ff7"/>
+        </linearGradient></defs>
+        <circle cx="50" cy="50" r="45" fill="none" stroke="url(#pwa-grad)" stroke-width="4"/>
+        <circle cx="50" cy="50" r="8" fill="url(#pwa-grad)"/>
+      </svg>
+    </div>
+    <div class="pwa-banner-text">
+      <div class="pwa-banner-title">安装 Nova-OS</div>
+      <div class="pwa-banner-desc">添加到主屏幕，体验更流畅</div>
+    </div>
+    <button id="pwa-install-btn" class="pwa-banner-btn">安装</button>
+    <button id="pwa-dismiss-btn" class="pwa-banner-dismiss"><div class="starfield">times;</button>
+  </div>
+
   <div class="starfield">
     <div class="stars"></div>
     <div class="stars2"></div>
@@ -935,12 +960,13 @@
 
   <!-- 脚本加载 -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/crypto.js?v=202606191005"></script>
-  <script src="/js/ui.js?v=202606191005"></script>
-  <script src="/js/auth.js?v=202606191005"></script>
-  <script src="/js/chat.js?v=202606191005"></script>
-  <script src="/js/ai.js?v=202606191005"></script>
-  <script src="/js/wallet.js?v=202606191005"></script>
-  <script src="/js/app.js?v=202606191005"></script>
+  <script src="/js/crypto.js?v=202606191100"></script>
+  <script src="/js/ui.js?v=202606191100"></script>
+  <script src="/js/auth.js?v=202606191100"></script>
+  <script src="/js/chat.js?v=202606191100"></script>
+  <script src="/js/ai.js?v=202606191100"></script>
+  <script src="/js/wallet.js?v=202606191100"></script>
+  <script src="/js/pwa.js?v=202606191100"></script>
+  <script src="/js/app.js?v=202606191100"></script>
 </body>
 </html>

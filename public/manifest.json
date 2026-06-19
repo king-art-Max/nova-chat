@@ -1,0 +1,42 @@
+{
+  "name": "Nova-OS 星尘聊天",
+  "short_name": "Nova-OS",
+  "description": "星尘加密聊天系统 - 安全、私密、跨平台即时通讯",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a1a",
+  "theme_color": "#0a0a1a",
+  "categories": ["social", "communication"],
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "新消息",
+      "short_name": "聊天",
+      "url": "/?action=chat",
+      "icons": [{"src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml"}]
+    }
+  ]
+}
