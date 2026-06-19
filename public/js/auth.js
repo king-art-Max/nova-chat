@@ -417,6 +417,10 @@ const Auth = {
   
   isLoggedIn() {
     return !!this.currentUser;
+  },
+  
+  getToken() {
+    return this.token || localStorage.getItem('nova_token') || '';
   }
 };
 

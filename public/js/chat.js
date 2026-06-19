@@ -14,14 +14,18 @@ const Chat = {
    * 初始化聊天模块
    */
   init() {
-    // 加载置顶聊天
     this.pinnedChats = JSON.parse(localStorage.getItem('nova_pinned_chats') || '[]');
-    
-    // 绑定事件
+    this.messageStatus = this.messageStatus || {};
     this.bindEvents();
-    
-    // 加载聊天列表
     this.loadChatList();
+    // 启动消息轮询兜底
+    this.startMessagePolling();
+    // 请求浏览器通知权限
+    try {
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    } catch(e) {}
   },
   
   /**
@@ -1121,17 +1125,19 @@ const Chat = {
         this.cancelQuote();
       }
       
-      // 通过Socket发送
+      // HTTP POST发送（可靠通道）
       const tempId = 'local-' + Date.now();
       message.tempId = tempId;
-      if (window.socket && window.socket.connected) {
-        window.socket.emit('send-message', message);
-      } else {
+      try {
         await fetch(`/api/chats/${message.chatId}/messages`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.getToken() },
           body: JSON.stringify(message)
         });
+      } catch(e) {
+        console.error('图片发送失败:', e);
+        UI.showToast('发送图片失败');
+        return;
       }
       
       // 立即在本地显示
@@ -1303,8 +1309,7 @@ const Chat = {
     if (!this.currentChat) return;
     const content = JSON.stringify({type: 'file', fileName, fileSize, fileType, content: base64});
     const message = {chatId: this.currentChat.id, senderId: Auth.getCurrentUserId(), encryptedContent: content, type: 'file', ttl: null, burnAfter: this.burnMode ? this.burnSeconds : 0, isAnonymous: this.anonymousMode};
-    if (window.socket && window.socket.connected) window.socket.emit('send-message', message);
-    else await fetch('/api/chats/' + message.chatId + '/messages', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(message)});
+    try { await fetch('/api/chats/' + message.chatId + '/messages', {method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.getToken()}, body: JSON.stringify(message)}); } catch(e) { UI.showToast('发送文件失败'); return; }
     const localMessage = {id: 'local-' + Date.now(), chatId: message.chatId, senderId: Auth.getCurrentUserId(), galNumber: Auth.currentUser?.galNumber || '', nickname: Auth.currentUser?.nickname || '', encryptedContent: content, type: 'file', metadata: {fileName, fileSize, fileType}, createdAt: new Date().toISOString()};
     if (!this.chatMessages[message.chatId]) this.chatMessages[message.chatId] = [];
     this.chatMessages[message.chatId].push(localMessage);
@@ -1352,8 +1357,7 @@ const Chat = {
       const duration = this.recordingSeconds;
       const content = JSON.stringify({type: 'voice', duration, content: base64});
       const message = {chatId: this.currentChat.id, senderId: Auth.getCurrentUserId(), encryptedContent: content, type: 'voice', ttl: null, burnAfter: this.burnMode ? this.burnSeconds : 0, isAnonymous: this.anonymousMode};
-      if (window.socket && window.socket.connected) window.socket.emit('send-message', message);
-      else await fetch('/api/chats/' + message.chatId + '/messages', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(message)});
+      try { await fetch('/api/chats/' + message.chatId + '/messages', {method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.getToken()}, body: JSON.stringify(message)}); } catch(e) { UI.showToast('发送语音失败'); return; }
       const localMessage = {id: 'local-' + Date.now(), chatId: message.chatId, senderId: Auth.getCurrentUserId(), galNumber: Auth.currentUser?.galNumber || '', nickname: Auth.currentUser?.nickname || '', encryptedContent: content, type: 'voice', metadata: {duration}, createdAt: new Date().toISOString()};
       if (!this.chatMessages[message.chatId]) this.chatMessages[message.chatId] = [];
       this.chatMessages[message.chatId].push(localMessage);
@@ -1471,137 +1475,137 @@ const Chat = {
     
     if (!content || !this.currentChat) return;
     
-    // 检查消息类型
     const isDestroy = this.burnMode;
     const isAnonymous = this.anonymousMode;
-    const ttl = null;
     const burnAfter = isDestroy ? this.burnSeconds : 0;
     
-    // ===== 第一步：构造并发送消息（只有这一步失败才报"发送失败"） =====
+    // ===== 第一步：加密 =====
     let encryptedContent = content;
-    let sendSucceeded = false;
-    let tempId = 'local-' + Date.now();
-    
     try {
-      // 尝试加密（私聊且非匿踪）
       if (!isAnonymous && this.currentChat.type !== 'group') {
-        try {
-          const otherMember = this.currentChat.members?.find(m => m.id !== Auth.getCurrentUserId());
-          
-          if (otherMember) {
-            let recipientKey = this.userPublicKeys[otherMember.id];
-            
-            if (!recipientKey && otherMember.publicKey) {
-              try {
-                recipientKey = typeof otherMember.publicKey === 'string'
-                  ? JSON.parse(otherMember.publicKey)
-                  : otherMember.publicKey;
-                this.userPublicKeys[otherMember.id] = recipientKey;
-              } catch (e) {}
-            }
-            
-            if (recipientKey && NovaCrypto && NovaCrypto.privateKey) {
-              const encrypted = await NovaCrypto.encryptMessage(content, recipientKey);
-              const senderPublicKey = JSON.stringify(NovaCrypto.publicKeyJwk);
-              encryptedContent = `${encrypted.iv}:${encrypted.ciphertext}:${senderPublicKey}`;
-            } else {
-              encryptedContent = JSON.stringify({ plain: true, content });
-            }
+        const otherMember = this.currentChat.members?.find(m => m.id !== Auth.getCurrentUserId());
+        if (otherMember) {
+          let recipientKey = this.userPublicKeys[otherMember.id];
+          if (!recipientKey && otherMember.publicKey) {
+            try { recipientKey = typeof otherMember.publicKey === 'string' ? JSON.parse(otherMember.publicKey) : otherMember.publicKey; this.userPublicKeys[otherMember.id] = recipientKey; } catch(e) {}
+          }
+          if (recipientKey && NovaCrypto && NovaCrypto.privateKey) {
+            const encrypted = await NovaCrypto.encryptMessage(content, recipientKey);
+            const senderPublicKey = JSON.stringify(NovaCrypto.publicKeyJwk);
+            encryptedContent = `${encrypted.iv}:${encrypted.ciphertext}:${senderPublicKey}`;
           } else {
             encryptedContent = JSON.stringify({ plain: true, content });
           }
-        } catch (encErr) {
-          console.warn('加密失败，发送明文:', encErr);
+        } else {
           encryptedContent = JSON.stringify({ plain: true, content });
         }
       } else if (this.currentChat.type === 'group') {
         encryptedContent = JSON.stringify({ plain: true, content });
       }
+    } catch (encErr) {
+      encryptedContent = JSON.stringify({ plain: true, content });
+    }
+    
+    // ===== 第二步：先在本地显示（即时反馈） =====
+    const tempId = 'local-' + Date.now();
+    const localMessage = {
+      id: tempId,
+      chatId: this.currentChat.id,
+      senderId: Auth.getCurrentUserId(),
+      galNumber: Auth.currentUser?.galNumber || '',
+      nickname: Auth.currentUser?.nickname || '',
+      encryptedContent: content,
+      type: isAnonymous ? 'anonymous' : (isDestroy ? 'self-destruct' : 'normal'),
+      burnAfter,
+      isAnonymous,
+      createdAt: new Date().toISOString()
+    };
+    this.messageStatus[tempId] = 'sending';
+    this.displayMessage(localMessage, true);
+    if (!this.chatMessages[localMessage.chatId]) this.chatMessages[localMessage.chatId] = [];
+    this.chatMessages[localMessage.chatId].push(localMessage);
+    input.value = '';
+    
+    // ===== 第三步：HTTP POST 发送（可靠通道，确保消息入库+广播） =====
+    const message = {
+      chatId: this.currentChat.id,
+      senderId: Auth.getCurrentUserId(),
+      encryptedContent,
+      type: isAnonymous ? 'anonymous' : (isDestroy ? 'self-destruct' : 'normal'),
+      ttl: null,
+      burnAfter,
+      isAnonymous,
+      tempId
+    };
+    
+    if (this.quotedMessage) {
+      try { message.quotedContent = this.quotedMessage.encryptedContent?.substring(0, 50) || ''; message.quotedSender = this.quotedMessage.nickname || '对方'; this.cancelQuote(); } catch(e) {}
+    }
+    
+    try {
+      const response = await fetch(`/api/chats/${message.chatId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + Auth.getToken()
+        },
+        body: JSON.stringify(message)
+      });
+      const result = await response.json();
       
-      // 构造消息
-      const message = {
-        chatId: this.currentChat.id,
-        senderId: Auth.getCurrentUserId(),
-        encryptedContent,
-        type: isAnonymous ? 'anonymous' : (isDestroy ? 'self-destruct' : 'normal'),
-        ttl,
-        burnAfter,
-        isAnonymous
-      };
-      
-      // 附加引用消息
-      if (this.quotedMessage) {
-        try {
-          message.quotedContent = this.quotedMessage.encryptedContent?.substring(0, 50) || '';
-          message.quotedSender = this.quotedMessage.nickname || '对方';
-          this.cancelQuote();
-        } catch (e) { /* 引用非关键 */ }
-      }
-      
-      message.tempId = tempId;
-      
-      // 发送消息
-      if (window.socket && window.socket.connected) {
-        window.socket.emit('send-message', message);
-        sendSucceeded = true;
-      } else {
-        console.warn('Socket未连接，使用HTTP发送');
-        const response = await fetch(`/api/chats/${message.chatId}/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(message)
-        });
-        const result = await response.json();
-        if (!result.success) {
-          throw new Error(result.error || 'HTTP发送失败');
+      if (result.success) {
+        // 发送成功 - 更新本地消息ID和状态
+        this.messageStatus[tempId] = 'delivered';
+        const localEl = document.querySelector(`[data-message-id="${tempId}"]`);
+        if (localEl && result.message && result.message.id) {
+          localEl.dataset.messageId = result.message.id;
+          const statusEl = localEl.querySelector('.message-status');
+          if (statusEl) {
+            statusEl.textContent = '✓✓';
+            statusEl.className = 'message-status msg-delivered';
+          }
         }
-        sendSucceeded = true;
+        // 更新缓存中的消息ID
+        const cached = this.chatMessages[localMessage.chatId];
+        if (cached) {
+          const idx = cached.findIndex(m => m.id === tempId);
+          if (idx >= 0 && result.message && result.message.id) {
+            cached[idx].id = result.message.id;
+            this.messageStatus[result.message.id] = 'delivered';
+            delete this.messageStatus[tempId];
+          }
+        }
+        // HTTP POST已经触发服务端广播new-message，不需要再socket emit
+      } else {
+        throw new Error(result.error || '发送失败');
       }
     } catch (sendError) {
       console.error('消息发送失败:', sendError);
+      this.messageStatus[tempId] = 'failed';
+      const localEl = document.querySelector(`[data-message-id="${tempId}"]`);
+      if (localEl) {
+        const statusEl = localEl.querySelector('.message-status');
+        if (statusEl) {
+          statusEl.textContent = '✗';
+          statusEl.className = 'message-status msg-failed';
+          statusEl.style.color = '#ff4444';
+        }
+      }
       UI.showToast('发送失败，请重试');
-      return;
     }
     
-    // ===== 第二步：更新本地UI（即使失败也不影响发送成功） =====
-    try {
-      const localMessage = {
-        id: tempId,
-        chatId: this.currentChat.id,
-        senderId: Auth.getCurrentUserId(),
-        galNumber: Auth.currentUser?.galNumber || '',
-        nickname: Auth.currentUser?.nickname || '',
-        encryptedContent: content,
-        type: isAnonymous ? 'anonymous' : (isDestroy ? 'self-destruct' : 'normal'),
-        ttl,
-        burnAfter,
-        isAnonymous,
-        createdAt: new Date().toISOString()
-      };
-      this.messageStatus[tempId] = 'sent';
-      this.displayMessage(localMessage, true);
-      
-      if (!this.chatMessages[localMessage.chatId]) {
-        this.chatMessages[localMessage.chatId] = [];
-      }
-      this.chatMessages[localMessage.chatId].push(localMessage);
-      
-      input.value = '';
-      
-      if (isDestroy) {
+    // ===== 第四步：非关键操作 =====
+    try { this.sendStopTyping(); } catch(e) {}
+    if (isDestroy) {
+      try {
         const btnDestroy = document.getElementById('btn-destroy');
         const destroyTimer = document.getElementById('destroy-timer');
         if (btnDestroy) btnDestroy.classList.remove('active');
         if (destroyTimer) destroyTimer.classList.add('hidden');
-      }
-    } catch (uiError) {
-      console.warn('UI更新失败（消息已发送）:', uiError);
-      // 消息已发送成功，UI失败不影响
-      input.value = '';
+      } catch(e) {}
     }
-    
-    // ===== 第三步：非关键操作 =====
-    try { this.sendStopTyping(); } catch(e) {}
+    // 刷新聊天列表，确保最新消息预览更新
+    try { this.loadChatList(); } catch(e) {}
   },
   
   /**
@@ -1680,6 +1684,86 @@ const Chat = {
   },
   
   /**
+   * 浏览器推送通知（不在聊天页面时可见）
+   */
+  sendBrowserNotification(senderName, message) {
+    try {
+      if (!('Notification' in window)) return;
+      if (Notification.permission === 'granted') {
+        let preview = '新消息';
+        try {
+          const raw = message.encryptedContent || '';
+          if (raw.startsWith('{')) {
+            const parsed = JSON.parse(raw);
+            if (parsed.plain && parsed.content) preview = parsed.content.substring(0, 50);
+            else if (parsed.type === 'image') preview = '[图片]';
+            else preview = '[加密消息]';
+          }
+        } catch(e) { preview = '新消息'; }
+        new Notification(`Nova-OS - ${senderName}`, { body: preview, icon: '/favicon.ico' });
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    } catch(e) {}
+  },
+  
+  /**
+   * 启动消息轮询（Socket断线/后台恢复时的兜底）
+   */
+  startMessagePolling() {
+    if (this._pollTimer) clearInterval(this._pollTimer);
+    this._lastPollTime = Date.now();
+    this._pollTimer = setInterval(() => {
+      this.pollNewMessages();
+    }, 5000);
+  },
+  
+  stopMessagePolling() {
+    if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
+  },
+  
+  async pollNewMessages() {
+    if (!Auth.isLoggedIn()) return;
+    try {
+      // 刷新聊天列表（检测未读和最新消息）
+      this.loadChatList();
+      
+      // 如果在聊天页面，检查是否有新消息
+      if (this.currentChat) {
+        const chatId = this.currentChat.id;
+        const response = await fetch(`/api/chats/${chatId}/messages?limit=5`);
+        const data = await response.json();
+        if (data.success && data.messages) {
+          const serverMessages = data.messages.reverse();
+          const localIds = new Set(
+            (this.chatMessages[chatId] || []).map(m => String(m.id))
+          );
+          for (const msg of serverMessages) {
+            if (!localIds.has(String(msg.id))) {
+              // 发现新消息，显示
+              const isSent = msg.sender_id === Auth.getCurrentUserId();
+              const message = {
+                id: msg.id,
+                chatId: chatId,
+                senderId: msg.sender_id,
+                galNumber: msg.gal_number || '',
+                nickname: msg.nickname || '',
+                encryptedContent: msg.encrypted_content,
+                type: msg.type || 'normal',
+                isRecalled: msg.is_recalled,
+                createdAt: msg.created_at
+              };
+              if (!this.chatMessages[chatId]) this.chatMessages[chatId] = [];
+              this.chatMessages[chatId].push(message);
+              this.displayMessage(message, isSent);
+            }
+          }
+        }
+      }
+    } catch(e) {}
+  },
+  
+  /**
    * 更新聊天列表未读标记
    */
   updateChatListBadge(chatId) {
@@ -1705,85 +1789,76 @@ const Chat = {
     closeChat() {
     if (this.isRecording) this.stopRecording();
     if (this.currentChat) {
-      // 不再leave-chat房间，保持接收消息
       this.sendStopTyping();
-      // 清除当前聊天未读数
       this.unreadCounts[this.currentChat.id] = 0;
       this.updateChatListBadge(this.currentChat.id);
       this.currentChat = null;
     }
     UI.hideChatWindow();
+    // 返回聊天列表时刷新，确保显示最新消息
+    this.loadChatList();
   },
   
   /**
    * 处理收到的消息
    */
   handleNewMessage(message) {
+    // 如果是自己发送的消息回显，检查是否需要替换本地临时消息
+    if (message.senderId === Auth.getCurrentUserId()) {
+      if (this.chatMessages[message.chatId]) {
+        const localMsg = this.chatMessages[message.chatId].find(m => 
+          m.id && m.id.startsWith('local-') && 
+          Math.abs(new Date(m.createdAt) - new Date(message.createdAt)) < 15000
+        );
+        if (localMsg) {
+          const localEl = document.querySelector(`[data-message-id="${localMsg.id}"]`);
+          if (localEl) {
+            localEl.dataset.messageId = message.id;
+            const statusEl = localEl.querySelector('.message-status');
+            if (statusEl) {
+              statusEl.textContent = '✓✓';
+              statusEl.className = 'message-status msg-delivered';
+            }
+          }
+          this.messageStatus[message.id] = 'delivered';
+          delete this.messageStatus[localMsg.id];
+          localMsg.id = message.id;
+          return;
+        }
+      }
+      // 如果没有找到本地临时消息，说明可能是HTTP POST已处理的，忽略重复
+      if (this.messageStatus[message.id]) return;
+    }
+    
+    // 检查是否已经在UI中显示过
+    const existingEl = document.querySelector(`[data-message-id="${message.id}"]`);
+    if (existingEl) return;
+    
+    // 不在当前聊天页面 - 显示通知
     if (!this.currentChat || this.currentChat.id !== message.chatId) {
-      // 不在当前聊天 - 显示通知并增加未读计数
       if (message.senderId !== Auth.getCurrentUserId()) {
-        // 增加未读计数
         if (!this.unreadCounts[message.chatId]) this.unreadCounts[message.chatId] = 0;
         this.unreadCounts[message.chatId]++;
-        // 更新聊天列表未读标记
         this.updateChatListBadge(message.chatId);
-        // 显示通知提示
         const senderName = message.nickname || message.galNumber || '未知用户';
         this.showNotification(senderName, message);
-        // 播放提示音
         this.playNotificationSound();
+        this.sendBrowserNotification(senderName, message);
       }
-      // 刷新列表
       this.loadChatList();
       return;
     }
     
-    // 检查是否已经本地显示过（避免重复）
-    const existingEl = document.querySelector(`[data-message-id="${message.id}"]`);
-    if (existingEl) return;
-    
-    // 检查是否是自己刚发的本地消息，用服务器ID替换
-    if (message.senderId === Auth.getCurrentUserId() && this.chatMessages[message.chatId]) {
-      const localMsg = this.chatMessages[message.chatId].find(m => 
-        m.id && m.id.startsWith('local-') && 
-        Math.abs(new Date(m.createdAt) - new Date(message.createdAt)) < 10000
-      );
-      if (localMsg) {
-        const localEl = document.querySelector(`[data-message-id="${localMsg.id}"]`);
-        if (localEl) {
-          localEl.dataset.messageId = message.id;
-          // 更新消息状态为"已送达"
-          const statusEl = localEl.querySelector('.message-status');
-          if (statusEl) {
-            statusEl.textContent = '✓✓';
-            statusEl.className = 'message-status msg-delivered';
-          }
-        }
-        // 转移消息状态
-        this.messageStatus[message.id] = 'delivered';
-        delete this.messageStatus[localMsg.id];
-        localMsg.id = message.id;
-        return;
-      }
-    }
-    
-    // 添加到本地缓存
-    if (!this.chatMessages[message.chatId]) {
-      this.chatMessages[message.chatId] = [];
-    }
+    // 在当前聊天页面 - 直接显示
+    if (!this.chatMessages[message.chatId]) this.chatMessages[message.chatId] = [];
     this.chatMessages[message.chatId].push(message);
     
-    // 显示消息
     const isSent = message.senderId === Auth.getCurrentUserId();
     this.displayMessage(message, isSent);
-    
-    // 如果是自己发送的，滚动到底部
-    if (isSent) {
-      const messagesEl = document.getElementById('chat-messages');
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
+    this.scrollToBottom();
   },
   
+    
   /**
    * 处理消息撤回
    */
@@ -2197,20 +2272,24 @@ Object.assign(Chat, {
     const blob = new Blob(this.audioChunks, { type: 'audio/webm' });
     const reader = new FileReader();
     
-    reader.onloadend = () => {
+    reader.onloadend = async () => {
       const base64 = reader.result;
       
-      // 通过Socket发送
-      if (window.socket && window.socket.connected) {
-        window.socket.emit('send-message', {
-          chatId: this.currentChat.id,
-          senderId: Auth.getCurrentUserId(),
-          encryptedContent: base64,
-          type: 'voice',
-          burnAfter: 0,
-          isAnonymous: false
+      // HTTP POST发送（可靠通道）
+      try {
+        await fetch('/api/chats/' + this.currentChat.id + '/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.getToken() },
+          body: JSON.stringify({
+            chatId: this.currentChat.id,
+            senderId: Auth.getCurrentUserId(),
+            encryptedContent: base64,
+            type: 'voice',
+            burnAfter: 0,
+            isAnonymous: false
+          })
         });
-      }
+      } catch(e) { console.error('语音发送失败:', e); }
       
       // 本地显示
       const duration = Math.floor((Date.now() - this.recordingStartTime) / 1000);
@@ -2482,7 +2561,6 @@ Object.assign(Chat, {
 // 覆盖原有的sendMessage，添加群模式检查
 const originalSendMessage = Chat.sendMessage;
 Chat.sendMessage = async function() {
-  // 检查群模式权限
   const permission = this.canSendMessage();
   if (!permission.allowed) {
     if (permission.reason === 'meeting') {
@@ -2490,8 +2568,6 @@ Chat.sendMessage = async function() {
     }
     return;
   }
-  
-  // 调用原始发送函数
   return originalSendMessage.apply(this, arguments);
 };
 
@@ -2830,7 +2906,17 @@ Object.assign(Chat, {
       };
       
       if (window.socket && window.socket.connected) {
-        window.socket.emit("send-message", forwardMessage);
+        // HTTP POST发送（可靠通道）
+        try {
+          await fetch('/api/chats/' + forwardMessage.chatId + '/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.getToken() },
+            body: JSON.stringify(forwardMessage)
+          });
+          UI.showToast('消息已转发');
+        } catch(e) {
+          UI.showToast('转发失败');
+        }
         UI.showToast("消息已转发");
       } else {
         const response = await fetch("/api/chats/" + chatId + "/messages", {

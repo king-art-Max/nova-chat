@@ -447,12 +447,12 @@ async function startServer() {
 
   app.post('/api/chats/:id/messages', async (req, res) => {
     const chatId = parseInt(req.params.id);
-    const { senderId, encryptedContent, type, ttl } = req.body;
+    const { senderId, encryptedContent, type, ttl, burnAfter, isAnonymous } = req.body;
     if (!chatId || !senderId || !encryptedContent) {
       return res.status(400).json({ success: false, error: '参数不完整' });
     }
     try {
-      const messageId = await db.saveMessage(chatId, senderId, encryptedContent, type || 'normal', ttl || null);
+      const messageId = await db.saveMessage(chatId, senderId, encryptedContent, type || 'normal', ttl || null, burnAfter || 0, isAnonymous || false);
       const sender = await db.getUserById(senderId);
       const message = {
         id: messageId,
@@ -464,13 +464,16 @@ async function startServer() {
         encryptedContent,
         type: type || 'normal',
         ttl: ttl || null,
+        burnAfter: burnAfter || 0,
+        isAnonymous: isAnonymous || false,
         isRecalled: false,
         createdAt: new Date().toISOString()
       };
-      // 通过Socket广播给聊天室的其他成员
+      // 通过Socket广播给聊天室的所有成员
       io.to(`chat-${chatId}`).emit('new-message', message);
       res.json({ success: true, message });
     } catch (error) {
+      console.error('保存消息失败:', error);
       res.status(500).json({ success: false, error: '服务器错误' });
     }
   });

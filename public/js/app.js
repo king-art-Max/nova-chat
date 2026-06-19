@@ -1556,19 +1556,20 @@ const AICompany = {
         
         // 将会议内容发送到群聊
         for (const msg of data.content) {
-          if (window.socket && window.socket.connected) {
-            window.socket.emit('send-message', {
-              chatId: this.currentChatId,
-              senderId: Auth.getCurrentUserId(),
-              encryptedContent: JSON.stringify({ 
-                plain: true, 
-                content: `【${msg.sender}】${msg.content}` 
-              }),
-              type: 'normal',
-              burnAfter: 0,
-              isAnonymous: false
+          try {
+            await fetch('/api/chats/' + this.currentChatId + '/messages', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.getToken() },
+              body: JSON.stringify({
+                chatId: this.currentChatId,
+                senderId: Auth.getCurrentUserId(),
+                encryptedContent: JSON.stringify({ plain: true, content: `【${msg.sender}】${msg.content}` }),
+                type: 'normal',
+                burnAfter: 0,
+                isAnonymous: false
+              })
             });
-          }
+          } catch(e) { console.error('发送会议消息失败:', e); }
         }
         
         document.getElementById('btn-start-meeting').textContent = '✅ 会议已召开';
