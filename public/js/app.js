@@ -1111,6 +1111,7 @@ const GroupSettings = {
       
       if (data.success) {
         this.currentChat = data.chat;
+        this.currentChat._members = data.members;
         this.render(data.chat, data.members);
       }
     } catch (error) {
@@ -1212,7 +1213,7 @@ const GroupSettings = {
         <div class="avatar">${UI.avatarMap[m.avatar] || '👤'}</div>
         <div class="member-info">
           <div class="member-name">${UI.escapeHtml(m.nickname)} ${m.id === currentUserId ? '(我)' : ''}</div>
-          <div class="member-role">${this.getRoleLabel(m.role)}</div>
+          <div class="member-role">${this.getRoleLabel(m.role)}${m.is_muted ? ' 🔇' : ''}</div>
         </div>
         ${isAdmin && m.id !== currentUserId ? `
           <div class="member-actions">
@@ -1424,6 +1425,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const inviteBtn = document.getElementById('btn-generate-invite');
   if (inviteBtn) {
     inviteBtn.addEventListener('click', () => GroupSettings.generateInviteCode());
+  }
+  
+  // 邀请联系人入群
+  const inviteContactsBtn = document.getElementById('btn-invite-contacts-gs');
+  if (inviteContactsBtn) {
+    inviteContactsBtn.addEventListener('click', () => {
+      if (Chat && Chat.currentChat) {
+        Chat.showInviteMembersModal(GroupSettings.currentChat ? (GroupSettings.currentChat._members || []) : []);
+      }
+    });
   }
   
   // 模式选择 - 点击后调用API切换

@@ -73,6 +73,7 @@ async function initPostgres() {
     chat_id INTEGER NOT NULL REFERENCES chats(id),
     user_id INTEGER NOT NULL REFERENCES users(id),
     role VARCHAR(20) DEFAULT 'member',
+    is_muted BOOLEAN DEFAULT FALSE,
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(chat_id, user_id)
   )`);
@@ -238,6 +239,7 @@ async function initSqlite() {
     chat_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
     role TEXT DEFAULT 'member',
+    is_muted INTEGER DEFAULT 0,
     joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(chat_id, user_id)
   )`);
@@ -765,7 +767,7 @@ async function addChatMember(chatId, userId, role = 'member') {
 
 async function getChatMembers(chatId) {
   return await queryAll(
-    `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key, cm.role
+    `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key, cm.role, cm.is_muted
      FROM chat_members cm
      JOIN users u ON cm.user_id = u.id
      WHERE cm.chat_id = ?`,
@@ -1112,6 +1114,44 @@ async function removeChatMember(chatId, userId) {
   return result.changes > 0;
 }
 
+
+async function muteChatMember(chatId, userId, isMuted) {
+  const result = await runSql(
+    'UPDATE chat_members SET is_muted = ? WHERE chat_id = ? AND user_id = ?',
+    [isMuted ? 1 : 0, chatId, userId]
+  );
+  return result.changes > 0;
+}
+
+async function unmuteAllMembers(chatId) {
+  const result = await runSql(
+    'UPDATE chat_members SET is_muted = 0 WHERE chat_id = ?',
+    [chatId]
+  );
+  return result.changes > 0;
+}
+
+async function transferOwnership(chatId, fromUserId, toUserId) {
+  // 先将原群主降为管理员
+  await runSql(
+    'UPDATE chat_members SET role = ? WHERE chat_id = ? AND user_id = ?',
+    ['admin', chatId, fromUserId]
+  );
+  // 再将目标用户升为群主
+  await runSql(
+    'UPDATE chat_members SET role = ? WHERE chat_id = ? AND user_id = ?',
+    ['owner', chatId, toUserId]
+  );
+  return true;
+}
+
+async function getMutedMembers(chatId) {
+  return await queryAll(
+    'SELECT user_id FROM chat_members WHERE chat_id = ? AND is_muted = 1',
+    [chatId]
+  );
+}
+
 async function createMeeting(chatId, hostId, title) {
   const result = await runInsert(
     'INSERT INTO meetings (chat_id, host_id, title) VALUES (?, ?, ?)',
@@ -1169,6 +1209,9 @@ async function createAdditionalTables() {
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS burn_after INTEGER DEFAULT 0`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS burned_at TIMESTAMP`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN DEFAULT FALSE`);
+  
+  // chat_members表新增字段
+  await pool.query(`ALTER TABLE chat_members ADD COLUMN IF NOT EXISTS is_muted BOOLEAN DEFAULT FALSE`);
 }
 
 // ==================== SQLite新增表 ====================
@@ -1192,6 +1235,7 @@ async function createAdditionalTablesSQLite() {
   try { sqlDb.run('ALTER TABLE messages ADD COLUMN burn_after INTEGER DEFAULT 0'); } catch(e) {}
   try { sqlDb.run('ALTER TABLE messages ADD COLUMN burned_at TEXT'); } catch(e) {}
   try { sqlDb.run('ALTER TABLE messages ADD COLUMN is_anonymous INTEGER DEFAULT 0'); } catch(e) {}
+  try { sqlDb.run('ALTER TABLE chat_members ADD COLUMN is_muted INTEGER DEFAULT 0'); } catch(e) {}
 }
 
 // 修改initDatabase函数末尾添加新表创建
@@ -1280,6 +1324,10 @@ module.exports.updateChatGroupMode = updateChatGroupMode;
 module.exports.updateChat = updateChat;
 module.exports.updateChatMemberRole = updateChatMemberRole;
 module.exports.removeChatMember = removeChatMember;
+module.exports.muteChatMember = muteChatMember;
+module.exports.unmuteAllMembers = unmuteAllMembers;
+module.exports.transferOwnership = transferOwnership;
+module.exports.getMutedMembers = getMutedMembers;
 module.exports.createMeeting = createMeeting;
 module.exports.getMeetings = getMeetings;
 module.exports.getStarredContacts = getStarredContacts;

@@ -361,7 +361,9 @@ async function startServer() {
             galNumber: m.gal_number,
             nickname: m.nickname,
             avatar: m.avatar,
-            publicKey: m.public_key
+            publicKey: m.public_key,
+            role: m.role,
+            is_muted: m.is_muted
           })),
           lastMessage: lastMsg ? {
             content: lastMsg.encrypted_content,
@@ -452,6 +454,23 @@ async function startServer() {
       return res.status(400).json({ success: false, error: '参数不完整' });
     }
     try {
+      // 群组消息权限检查
+      const chat = await db.getChatById(chatId);
+      if (chat && chat.type === 'group') {
+        const chatMembers = await db.getChatMembers(chatId);
+        const senderMember = chatMembers.find(m => m.id === senderId);
+        
+        // 检查禁言状态
+        if (senderMember && senderMember.is_muted) {
+          return res.status(403).json({ success: false, error: '你已被禁言' });
+        }
+        
+        // 会议模式：仅管理员可发言
+        if (chat.group_mode === 'meeting' && senderMember && !['owner', 'admin'].includes(senderMember.role)) {
+          return res.status(403).json({ success: false, error: '会议模式下仅管理员可发言' });
+        }
+      }
+      
       const messageId = await db.saveMessage(chatId, senderId, encryptedContent, type || 'normal', ttl || null, burnAfter || 0, isAnonymous || false);
       const sender = await db.getUserById(senderId);
       const message = {
@@ -1025,6 +1044,21 @@ function getAICompanyFallbackReply(galNumber, userMessage) {
     socket.on('send-message', async (data) => {
       const { chatId, senderId, encryptedContent, type, ttl, burnAfter, isAnonymous } = data;
       try {
+        // 群组消息权限检查
+        const chat = await db.getChatById(chatId);
+        if (chat && chat.type === 'group') {
+          const chatMembers = await db.getChatMembers(chatId);
+          const senderMember = chatMembers.find(m => m.id === senderId);
+          if (senderMember && senderMember.is_muted) {
+            socket.emit('error', { message: '你已被禁言' });
+            return;
+          }
+          if (chat.group_mode === 'meeting' && senderMember && !['owner', 'admin'].includes(senderMember.role)) {
+            socket.emit('error', { message: '会议模式下仅管理员可发言' });
+            return;
+          }
+        }
+        
         const messageId = await db.saveMessage(chatId, senderId, encryptedContent, type, ttl, burnAfter || 0, isAnonymous || false);
         const sender = await db.getUserById(senderId);
         const messageData = {
@@ -1497,7 +1531,195 @@ function getAICompanyFallbackReply(galNumber, userMessage) {
     }
   });
   
-  // 获取收藏联系人
+
+  // 禁言/解禁群成员
+  app.put('/api/chats/:id/members/:userId/mute', async (req, res) => {
+    const chatId = parseInt(req.params.id);
+    const targetUserId = parseInt(req.params.userId);
+    const { userId, isMuted } = req.body;
+    
+    if (!chatId || !userId || !targetUserId) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    
+    try {
+      const members = await db.getChatMembers(chatId);
+      const member = members.find(m => m.id === userId);
+      
+      if (!member || !['owner', 'admin'].includes(member.role)) {
+        return res.status(403).json({ success: false, error: '无权限操作' });
+      }
+      
+      const target = members.find(m => m.id === targetUserId);
+      if (target?.role === 'owner') {
+        return res.status(400).json({ success: false, error: '不能禁言群主' });
+      }
+      
+      await db.muteChatMember(chatId, targetUserId, isMuted);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('禁言操作失败:', error);
+      res.status(500).json({ success: false, error: '操作失败' });
+    }
+  });
+  
+  // 退群
+  app.post('/api/chats/:id/leave', async (req, res) => {
+    const chatId = parseInt(req.params.id);
+    const { userId } = req.body;
+    
+    if (!chatId || !userId) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    
+    try {
+      const members = await db.getChatMembers(chatId);
+      const member = members.find(m => m.id === userId);
+      
+      if (!member) {
+        return res.status(400).json({ success: false, error: '你不是该群成员' });
+      }
+      
+      if (member.role === 'owner') {
+        // 群主退群 = 解散群
+        await db.deleteChat(chatId);
+        // 通知其他成员
+        const otherMembers = members.filter(m => m.id !== userId);
+        otherMembers.forEach(m => {
+          io.emit(`chat_updated_${m.id}`, { action: 'deleted', chatId });
+        });
+      } else {
+        // 普通成员退群
+        await db.removeChatMember(chatId, userId);
+        // 通知群内其他人
+        members.forEach(m => {
+          io.emit(`chat_updated_${m.id}`, { action: 'member_left', chatId, leftUserId: userId });
+        });
+      }
+      
+      res.json({ success: true, isDisbanded: member.role === 'owner' });
+    } catch (error) {
+      console.error('退群失败:', error);
+      res.status(500).json({ success: false, error: '退群失败' });
+    }
+  });
+  
+  // 转让群主
+  app.post('/api/chats/:id/transfer', async (req, res) => {
+    const chatId = parseInt(req.params.id);
+    const { userId, targetUserId } = req.body;
+    
+    if (!chatId || !userId || !targetUserId) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    
+    try {
+      const members = await db.getChatMembers(chatId);
+      const member = members.find(m => m.id === userId);
+      
+      if (!member || member.role !== 'owner') {
+        return res.status(403).json({ success: false, error: '只有群主可以转让' });
+      }
+      
+      const target = members.find(m => m.id === targetUserId);
+      if (!target) {
+        return res.status(400).json({ success: false, error: '目标用户不是群成员' });
+      }
+      
+      await db.transferOwnership(chatId, userId, targetUserId);
+      
+      // 通知所有成员
+      members.forEach(m => {
+        io.emit(`chat_updated_${m.id}`, { action: 'ownership_transferred', chatId, newOwnerId: targetUserId });
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('转让群主失败:', error);
+      res.status(500).json({ success: false, error: '转让失败' });
+    }
+  });
+  
+  // 全体禁言/解禁
+  app.put('/api/chats/:id/mute-all', async (req, res) => {
+    const chatId = parseInt(req.params.id);
+    const { userId, isMuted } = req.body;
+    
+    if (!chatId || !userId) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    
+    try {
+      const members = await db.getChatMembers(chatId);
+      const member = members.find(m => m.id === userId);
+      
+      if (!member || !['owner', 'admin'].includes(member.role)) {
+        return res.status(403).json({ success: false, error: '无权限操作' });
+      }
+      
+      if (isMuted) {
+        // 禁言所有普通成员（保留群主和管理员）
+        for (const m of members) {
+          if (!['owner', 'admin'].includes(m.role)) {
+            await db.muteChatMember(chatId, m.id, true);
+          }
+        }
+      } else {
+        await db.unmuteAllMembers(chatId);
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('全体禁言操作失败:', error);
+      res.status(500).json({ success: false, error: '操作失败' });
+    }
+  });
+  
+  // 从联系人批量邀请成员
+  app.post('/api/chats/:id/invite-contacts', async (req, res) => {
+    const chatId = parseInt(req.params.id);
+    const { userId, galNumbers } = req.body;
+    
+    if (!chatId || !userId || !galNumbers || !galNumbers.length) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    
+    try {
+      const members = await db.getChatMembers(chatId);
+      const member = members.find(m => m.id === userId);
+      
+      if (!member || !['owner', 'admin'].includes(member.role)) {
+        return res.status(403).json({ success: false, error: '无权限操作' });
+      }
+      
+      const existingIds = new Set(members.map(m => m.id));
+      const added = [];
+      const failed = [];
+      
+      for (const gal of galNumbers) {
+        const targetUser = await db.getUserByGal(gal);
+        if (!targetUser) {
+          failed.push({ gal, reason: '用户不存在' });
+          continue;
+        }
+        if (existingIds.has(targetUser.id)) {
+          failed.push({ gal, reason: '已是成员' });
+          continue;
+        }
+        await db.addChatMember(chatId, targetUser.id, 'member');
+        existingIds.add(targetUser.id);
+        added.push({ id: targetUser.id, nickname: targetUser.nickname, galNumber: targetUser.gal_number });
+      }
+      
+      res.json({ success: true, added, failed });
+    } catch (error) {
+      console.error('批量邀请失败:', error);
+      res.status(500).json({ success: false, error: '邀请失败' });
+    }
+  });
+
+    // 获取收藏联系人
   app.get('/api/contacts/starred', async (req, res) => {
     const userId = parseInt(req.query.userId);
     
@@ -1550,7 +1772,8 @@ function getAICompanyFallbackReply(galNumber, userMessage) {
           galNumber: m.gal_number,
           nickname: m.nickname,
           avatar: m.avatar,
-          role: m.role
+          role: m.role,
+          is_muted: m.is_muted
         }))
       });
     } catch (error) {

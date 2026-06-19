@@ -2662,6 +2662,8 @@ Object.assign(Chat, {
     // 从服务器获取最新成员数据
     let members = this.currentChat.members || [];
     let chatInfo = this.currentChat;
+    const currentUserId = Auth.getCurrentUserId();
+    
     if (this.currentChat.type === 'group') {
       try {
         const resp = await fetch(`/api/chats/${this.currentChat.id}`);
@@ -2673,43 +2675,171 @@ Object.assign(Chat, {
       } catch (e) { console.error('获取群成员失败:', e); }
     }
     
+    const chat = chatInfo;
+    const isGroup = chat.type === 'group';
+    const currentMember = isGroup ? members.find(m => m.id === currentUserId) : null;
+    const isOwner = currentMember?.role === 'owner';
+    const isAdmin = currentMember && ['owner', 'admin'].includes(currentMember.role);
+    const isAICompany = chat.groupMode === 'ai_company';
+    
     // 创建信息面板
     let panel = document.createElement('div');
     panel.id = 'chat-info-panel';
     panel.className = 'chat-info-panel';
     
-    const chat = chatInfo;
     let html = '<div class="panel-header"><h3>聊天信息</h3><button class="btn-icon" id="btn-close-chat-info">✕</button></div>';
     
-    if (chat.type === 'group') {
-      html += '<div class="panel-section"><div class="panel-label">群组名称</div><div class="panel-value">' + (chat.name || '未命名') + '</div></div>';
-      html += '<div class="panel-section"><div class="panel-label">成员 (' + (members.length || 0) + ')</div>';
-      if (members.length > 0) {
-        html += '<div class="member-list">';
-        members.forEach(m => {
-          const isAI = m.galNumber && m.galNumber.startsWith('AI-');
-          const roleLabel = m.role === 'owner' ? ' 👑' : m.role === 'admin' ? ' ⚡' : (isAI ? ' 🤖' : '');
-          html += '<div class="member-item"><span class="avatar">' + (UI.avatarMap[m.avatar] || (isAI ? '🤖' : '👤')) + '</span><span class="name">' + UI.escapeHtml(m.nickname) + roleLabel + '</span></div>';
-        });
-        html += '</div>';
+    if (isGroup) {
+      // === 群组头像和名称 ===
+      html += '<div class="info-group-header">';
+      html += '<div class="info-group-avatar">👥</div>';
+      html += '<div class="info-group-meta">';
+      html += '<div class="info-group-name-row"><span class="info-group-name">' + UI.escapeHtml(chat.name || '未命名群组') + '</span>';
+      if (isAdmin) {
+        html += '<button class="btn-icon-sm" id="btn-edit-group-name" title="修改群名">✏️</button>';
       }
       html += '</div>';
-      // 群组设置入口
-      html += '<div class="panel-section"><button class="btn btn-secondary" style="width:100%" id="btn-open-group-settings">⚙️ 群组设置</button></div>';
-      // AI公司专属：召开会议入口
-      if (chat.groupMode === 'ai_company') {
-        html += '<div class="panel-section"><button class="btn btn-primary" style="width:100%" id="btn-trigger-ai-meeting">📋 召开AI会议</button></div>';
+      if (chat.description) {
+        html += '<div class="info-group-desc">' + UI.escapeHtml(chat.description) + '</div>';
       }
+      html += '</div></div>';
+      
+      // === 群模式标签 ===
+      const modeLabels = { open: '🟢 开放群', meeting: '🔵 会议群', quiet: '🟣 防互扰群', ai_company: '🤖 AI公司' };
+      const modeDescs = { open: '任何人可自由发言', meeting: '仅管理员可发言', quiet: '成员间不可私聊', ai_company: 'AI自动回复模式' };
+      html += '<div class="info-mode-tag">' + (modeLabels[chat.groupMode] || '🟢 开放群') + ' · ' + (modeDescs[chat.groupMode] || '') + '</div>';
+      
+      // === 成员区域 ===
+      html += '<div class="info-section">';
+      html += '<div class="info-section-header"><span>群成员 (' + members.length + ')</span>';
+      if (isAdmin) {
+        html += '<button class="btn-text" id="btn-invite-members">＋ 邀请</button>';
+      }
+      html += '</div>';
+      
+      // 成员网格
+      html += '<div class="info-members-grid">';
+      members.forEach(m => {
+        const isAI = m.galNumber && m.galNumber.startsWith && m.galNumber.startsWith('AI-');
+        const roleIcon = m.role === 'owner' ? '👑' : m.role === 'admin' ? '⚡' : (isAI ? '🤖' : '');
+        const mutedIcon = m.is_muted ? '🔇' : '';
+        html += '<div class="info-member-card" data-user-id="' + m.id + '">';
+        html += '<div class="info-member-avatar">' + (UI.avatarMap[m.avatar] || (isAI ? '🤖' : '👤')) + '</div>';
+        html += '<div class="info-member-name">' + UI.escapeHtml(m.nickname) + (m.id === currentUserId ? '(我)' : '') + '</div>';
+        if (roleIcon || mutedIcon) {
+          html += '<div class="info-member-badges">' + roleIcon + mutedIcon + '</div>';
+        }
+        html += '</div>';
+      });
+      html += '</div></div>';
+      
+      // === 群公告 ===
+      if (chat.announcement) {
+        html += '<div class="info-section">';
+        html += '<div class="info-section-header"><span>📌 群公告</span>';
+        if (isAdmin) html += '<button class="btn-text" id="btn-edit-announcement">编辑</button>';
+        html += '</div>';
+        html += '<div class="info-announcement-content">' + UI.escapeHtml(chat.announcement) + '</div>';
+        html += '</div>';
+      } else if (isAdmin) {
+        html += '<div class="info-section">';
+        html += '<div class="info-section-header"><span>📌 群公告</span>';
+        html += '<button class="btn-text" id="btn-edit-announcement">发布</button>';
+        html += '</div>';
+        html += '<div class="info-announcement-empty">暂无公告</div>';
+        html += '</div>';
+      }
+      
+      // === 管理功能（管理员可见）===
+      if (isAdmin) {
+        html += '<div class="info-section info-admin-section">';
+        html += '<div class="info-section-header"><span>⚙️ 群管理</span></div>';
+        
+        // 邀请码
+        html += '<div class="info-action-row" id="row-invite-code">';
+        html += '<span>邀请码入群</span>';
+        html += '<button class="btn-text" id="btn-generate-invite-inline">' + (chat.inviteCode ? chat.inviteCode : '生成邀请码') + '</button>';
+        html += '</div>';
+        
+        // 全体禁言切换
+        const hasMutedMembers = members.some(m => m.is_muted && m.role !== 'owner' && m.role !== 'admin');
+        html += '<div class="info-action-row">';
+        html += '<span>全体禁言</span>';
+        html += '<label class="toggle-switch"><input type="checkbox" id="toggle-mute-all"' + (hasMutedMembers ? ' checked' : '') + '><span class="toggle-slider"></span></label>';
+        html += '</div>';
+        
+        // 群模式切换（AI公司不显示）
+        if (!isAICompany) {
+          html += '<div class="info-action-row" id="row-mode-switch">';
+          html += '<span>群模式</span>';
+          html += '<select class="info-select" id="select-group-mode">';
+          html += '<option value="open"' + (chat.groupMode === 'open' ? ' selected' : '') + '>🟢 开放群</option>';
+          html += '<option value="meeting"' + (chat.groupMode === 'meeting' ? ' selected' : '') + '>🔵 会议群</option>';
+          html += '<option value="quiet"' + (chat.groupMode === 'quiet' ? ' selected' : '') + '>🟣 防互扰群</option>';
+          html += '</select>';
+          html += '</div>';
+        }
+        
+        // 转让群主（仅群主可见）
+        if (isOwner) {
+          html += '<div class="info-action-row">';
+          html += '<span>转让群主</span>';
+          html += '<button class="btn-text btn-warn" id="btn-transfer-ownership">转让</button>';
+          html += '</div>';
+        }
+        
+        html += '</div>';
+      }
+      
+      // === 常规功能 ===
+      html += '<div class="info-section">';
+      html += '<div class="info-section-header"><span>🔧 设置</span></div>';
+      
+      // 消息免打扰
+      html += '<div class="info-action-row">';
+      html += '<span>消息免打扰</span>';
+      html += '<label class="toggle-switch"><input type="checkbox" id="toggle-mute-notif"' + (chat.isMuted ? ' checked' : '') + '><span class="toggle-slider"></span></label>';
+      html += '</div>';
+      
+      // 群组设置（完整版）
+      html += '<div class="info-action-row" id="row-full-settings">';
+      html += '<span>完整群设置</span>';
+      html += '<button class="btn-text" id="btn-open-group-settings">前往 →</button>';
+      html += '</div>';
+      
+      html += '</div>';
+      
+      // === AI公司专属 ===
+      if (isAICompany) {
+        html += '<div class="info-section">';
+        html += '<button class="btn btn-primary" style="width:100%" id="btn-trigger-ai-meeting">📋 召开AI会议</button>';
+        html += '</div>';
+      }
+      
     } else {
-      const otherMember = chat.members?.find(m => m.id !== Auth.getCurrentUserId());
+      // === 私聊信息 ===
+      const otherMember = chat.members?.find(m => m.id !== currentUserId);
       if (otherMember) {
-        html += '<div class="panel-section"><div class="panel-label">昵称</div><div class="panel-value">' + UI.escapeHtml(otherMember.nickname) + '</div></div>';
-        html += '<div class="panel-section"><div class="panel-label">Gal号</div><div class="panel-value">' + UI.formatGalNumber(otherMember.galNumber) + '</div></div>';
+        html += '<div class="info-group-header">';
+        html += '<div class="info-member-avatar-lg">' + (UI.avatarMap[otherMember.avatar] || '👤') + '</div>';
+        html += '<div class="info-group-meta">';
+        html += '<div class="info-group-name">' + UI.escapeHtml(otherMember.nickname) + '</div>';
+        html += '<div class="info-group-desc">Gal: ' + UI.formatGalNumber(otherMember.galNumber) + '</div>';
+        html += '</div></div>';
       }
     }
     
-    // 清空聊天记录按钮
-    html += '<div class="panel-section" style="margin-top:16px"><button class="btn btn-danger" style="width:100%" id="btn-clear-chat-history">🗑️ 清空聊天记录</button></div>';
+    // === 底部操作 ===
+    html += '<div class="info-section info-danger-section">';
+    html += '<button class="btn btn-secondary" style="width:100%" id="btn-clear-chat-history">🗑️ 清空聊天记录</button>';
+    if (isGroup) {
+      if (isOwner) {
+        html += '<button class="btn btn-danger" style="width:100%" id="btn-disband-group">❌ 解散群组</button>';
+      } else {
+        html += '<button class="btn btn-danger" style="width:100%" id="btn-leave-group">🚪 退出群组</button>';
+      }
+    }
+    html += '</div>';
     
     panel.innerHTML = html;
     
@@ -2717,11 +2847,14 @@ Object.assign(Chat, {
     const chatWindow = document.getElementById('chat-window');
     chatWindow.appendChild(panel);
     
-    // 绑定事件
+    // === 绑定事件 ===
+    
+    // 关闭面板
     document.getElementById('btn-close-chat-info')?.addEventListener('click', () => {
       panel.classList.add('hidden');
     });
     
+    // 清空聊天记录
     document.getElementById('btn-clear-chat-history')?.addEventListener('click', () => {
       UI.showConfirm('清空聊天记录', '确定要清空所有聊天记录吗？此操作不可恢复。', async () => {
         try {
@@ -2734,24 +2867,441 @@ Object.assign(Chat, {
       });
     });
     
-    document.getElementById('btn-open-group-settings')?.addEventListener('click', () => {
-      panel.classList.add('hidden');
-      if (window.GroupSettings) {
-        GroupSettings.show(this.currentChat.id);
-      }
-    });
-    
-    document.getElementById('btn-trigger-ai-meeting')?.addEventListener('click', () => {
-      panel.classList.add('hidden');
-      if (window.AICompany) {
-        AICompany.showMeeting(this.currentChat.id);
-      }
-    });
+    if (isGroup) {
+      // 修改群名
+      document.getElementById('btn-edit-group-name')?.addEventListener('click', () => {
+        const newName = prompt('修改群名称:', chat.name || '');
+        if (newName && newName.trim() && newName.trim() !== chat.name) {
+          fetch('/api/chats/' + this.currentChat.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId, name: newName.trim() })
+          }).then(r => r.json()).then(data => {
+            if (data.success) {
+              UI.showToast('群名已更新');
+              this.showChatInfoPanel(); // 刷新面板
+            } else { UI.showToast(data.error || '更新失败'); }
+          });
+        }
+      });
+      
+      // 编辑群公告
+      document.getElementById('btn-edit-announcement')?.addEventListener('click', () => {
+        const newAnn = prompt('编辑群公告:', chat.announcement || '');
+        if (newAnn !== null) {
+          fetch('/api/chats/' + this.currentChat.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId, announcement: newAnn })
+          }).then(r => r.json()).then(data => {
+            if (data.success) {
+              UI.showToast('公告已更新');
+              this.showChatInfoPanel();
+            } else { UI.showToast(data.error || '更新失败'); }
+          });
+        }
+      });
+      
+      // 邀请成员
+      document.getElementById('btn-invite-members')?.addEventListener('click', () => {
+        this.showInviteMembersModal(members);
+      });
+      
+      // 成员卡片点击 -> 成员详情
+      panel.querySelectorAll('.info-member-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const userId = parseInt(card.dataset.userId);
+          this.showMemberDetail(userId, members, isOwner, isAdmin, currentUserId);
+        });
+      });
+      
+      // 生成/显示邀请码
+      document.getElementById('btn-generate-invite-inline')?.addEventListener('click', async () => {
+        if (chat.inviteCode) {
+          // 复制邀请码
+          try {
+            await navigator.clipboard.writeText(chat.inviteCode);
+            UI.showToast('邀请码已复制: ' + chat.inviteCode);
+          } catch(e) {
+            UI.showToast('邀请码: ' + chat.inviteCode);
+          }
+          return;
+        }
+        try {
+          const resp = await fetch('/api/chats/' + this.currentChat.id + '/invite-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId })
+          });
+          const data = await resp.json();
+          if (data.success) {
+            chat.inviteCode = data.inviteCode;
+            document.getElementById('btn-generate-invite-inline').textContent = data.inviteCode;
+            UI.showToast('邀请码已生成');
+          } else { UI.showToast(data.error || '生成失败'); }
+        } catch(e) { UI.showToast('生成失败'); }
+      });
+      
+      // 全体禁言
+      document.getElementById('toggle-mute-all')?.addEventListener('change', async (e) => {
+        const isMuted = e.target.checked;
+        try {
+          const resp = await fetch('/api/chats/' + this.currentChat.id + '/mute-all', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId, isMuted })
+          });
+          const data = await resp.json();
+          if (data.success) {
+            UI.showToast(isMuted ? '已开启全体禁言' : '已关闭全体禁言');
+          } else {
+            e.target.checked = !isMuted;
+            UI.showToast(data.error || '操作失败');
+          }
+        } catch(e) {
+          e.target.checked = !isMuted;
+          UI.showToast('操作失败');
+        }
+      });
+      
+      // 群模式切换
+      document.getElementById('select-group-mode')?.addEventListener('change', async (e) => {
+        const newMode = e.target.value;
+        try {
+          const resp = await fetch('/api/chats/' + this.currentChat.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId, mode: newMode })
+          });
+          const data = await resp.json();
+          if (data.success) {
+            this.currentChat.groupMode = newMode;
+            UI.showToast('群模式已切换');
+            this.showChatInfoPanel(); // 刷新
+          } else { UI.showToast(data.error || '切换失败'); }
+        } catch(e) { UI.showToast('切换失败'); }
+      });
+      
+      // 转让群主
+      document.getElementById('btn-transfer-ownership')?.addEventListener('click', () => {
+        this.showTransferOwnershipModal(members, currentUserId);
+      });
+      
+      // 消息免打扰
+      document.getElementById('toggle-mute-notif')?.addEventListener('change', async (e) => {
+        const isMuted = e.target.checked;
+        try {
+          await fetch('/api/chats/' + this.currentChat.id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId, isMuted })
+          });
+          UI.showToast(isMuted ? '已开启免打扰' : '已关闭免打扰');
+        } catch(e) { UI.showToast('操作失败'); }
+      });
+      
+      // 完整群设置
+      document.getElementById('btn-open-group-settings')?.addEventListener('click', () => {
+        panel.classList.add('hidden');
+        if (window.GroupSettings) {
+          GroupSettings.show(this.currentChat.id);
+        }
+      });
+      
+      // AI会议
+      document.getElementById('btn-trigger-ai-meeting')?.addEventListener('click', () => {
+        panel.classList.add('hidden');
+        if (window.AICompany) {
+          AICompany.showMeeting(this.currentChat.id);
+        }
+      });
+      
+      // 退群
+      document.getElementById('btn-leave-group')?.addEventListener('click', () => {
+        UI.showConfirm('退出群组', '确定要退出该群组吗？', async () => {
+          try {
+            const resp = await fetch('/api/chats/' + this.currentChat.id + '/leave', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: currentUserId })
+            });
+            const data = await resp.json();
+            if (data.success) {
+              UI.showToast('已退出群组');
+              this.closeChat();
+              this.loadChatList();
+            } else { UI.showToast(data.error || '退群失败'); }
+          } catch(e) { UI.showToast('退群失败'); }
+        });
+      });
+      
+      // 解散群组
+      document.getElementById('btn-disband-group')?.addEventListener('click', () => {
+        UI.showConfirm('解散群组', '确定要解散该群组吗？此操作不可恢复，所有成员将被移除。', async () => {
+          try {
+            const resp = await fetch('/api/chats/' + this.currentChat.id + '/leave', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: currentUserId })
+            });
+            const data = await resp.json();
+            if (data.success) {
+              UI.showToast('群组已解散');
+              this.closeChat();
+              this.loadChatList();
+            } else { UI.showToast(data.error || '解散失败'); }
+          } catch(e) { UI.showToast('解散失败'); }
+        });
+      });
+    }
     
     // 更新AppState
     if (window.AppState) AppState.inChatInfo = true;
   },
-
+  
+  // === 邀请成员弹窗（从联系人选择）===
+  showInviteMembersModal(currentMembers) {
+    const currentMemberIds = new Set(currentMembers.map(m => m.id));
+    const currentUserId = Auth.getCurrentUserId();
+    
+    // 获取联系人列表
+    let contacts = [];
+    if (window.AppData && AppData.contacts) {
+      contacts = AppData.contacts.filter(c => c.status === 'accepted' && !currentMemberIds.has(c.id));
+    }
+    
+    if (contacts.length === 0) {
+      UI.showToast('没有可邀请的联系人');
+      return;
+    }
+    
+    let html = '<div class="invite-contacts-list">';
+    contacts.forEach(c => {
+      html += '<label class="invite-contact-item">';
+      html += '<input type="checkbox" class="invite-check" data-gal="' + c.galNumber + '" data-name="' + UI.escapeHtml(c.nickname) + '">';
+      html += '<span class="avatar">' + (UI.avatarMap[c.avatar] || '👤') + '</span>';
+      html += '<span class="name">' + UI.escapeHtml(c.nickname) + '</span>';
+      html += '<span class="gal">' + UI.formatGalNumber(c.galNumber) + '</span>';
+      html += '</label>';
+    });
+    html += '</div>';
+    
+    UI.showModal('邀请成员加入群组', html, [
+      { text: '取消', class: 'btn-secondary' },
+      { text: '邀请 (' + contacts.length + '人可选)', class: 'btn-primary', id: 'btn-confirm-invite', closeOnClick: false, onClick: async () => {
+        const checks = document.querySelectorAll('.invite-check:checked');
+        if (checks.length === 0) {
+          UI.showToast('请选择要邀请的成员');
+          return;
+        }
+        const galNumbers = Array.from(checks).map(c => c.dataset.gal);
+        
+        try {
+          const resp = await fetch('/api/chats/' + this.currentChat.id + '/invite-contacts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId, galNumbers })
+          });
+          const data = await resp.json();
+          if (data.success) {
+            const addedCount = data.added.length;
+            UI.showToast('成功邀请 ' + addedCount + ' 人加入群组');
+            UI.closeModal();
+            this.showChatInfoPanel(); // 刷新面板
+          } else {
+            UI.showToast(data.error || '邀请失败');
+          }
+        } catch(e) { UI.showToast('邀请失败'); }
+      }}
+    ]);
+  },
+  
+  // === 成员详情弹窗 ===
+  showMemberDetail(userId, members, isOwner, isAdmin, currentUserId) {
+    const member = members.find(m => m.id === userId);
+    if (!member) return;
+    
+    const isAI = member.galNumber && member.galNumber.startsWith && member.galNumber.startsWith('AI-');
+    const isSelf = userId === currentUserId;
+    const canManage = isAdmin && !isSelf && member.role !== 'owner';
+    
+    let html = '<div class="member-detail">';
+    html += '<div class="member-detail-avatar">' + (UI.avatarMap[member.avatar] || (isAI ? '🤖' : '👤')) + '</div>';
+    html += '<div class="member-detail-name">' + UI.escapeHtml(member.nickname) + '</div>';
+    html += '<div class="member-detail-gal">Gal: ' + UI.formatGalNumber(member.galNumber) + '</div>';
+    html += '<div class="member-detail-role">' + (member.role === 'owner' ? '👑 群主' : member.role === 'admin' ? '⚡ 管理员' : isAI ? '🤖 AI' : '👤 成员') + '</div>';
+    
+    if (canManage) {
+      html += '<div class="member-detail-actions">';
+      
+      // 设为/取消管理员（仅群主）
+      if (isOwner) {
+        if (member.role === 'admin') {
+          html += '<button class="btn btn-secondary" id="btn-demote-admin">取消管理员</button>';
+        } else {
+          html += '<button class="btn btn-secondary" id="btn-promote-admin">设为管理员</button>';
+        }
+      }
+      
+      // 禁言/解禁
+      if (member.is_muted) {
+        html += '<button class="btn btn-secondary" id="btn-unmute-member">解除禁言</button>';
+      } else {
+        html += '<button class="btn btn-secondary" id="btn-mute-member">禁言</button>';
+      }
+      
+      // 移除成员
+      html += '<button class="btn btn-danger" id="btn-remove-member">移除出群</button>';
+      html += '</div>';
+    }
+    
+    html += '</div>';
+    
+    UI.showModal('成员详情', html, [
+      { text: '关闭', class: 'btn-secondary' }
+    ]);
+    
+    // 绑定操作事件
+    setTimeout(() => {
+      // 设为管理员
+      document.getElementById('btn-promote-admin')?.addEventListener('click', async () => {
+        try {
+          const resp = await fetch(`/api/chats/${this.currentChat.id}/members/${userId}/role`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId, role: 'admin' })
+          });
+          const data = await resp.json();
+          if (data.success) {
+            UI.showToast('已设为管理员');
+            UI.closeModal();
+            this.showChatInfoPanel();
+          } else { UI.showToast(data.error || '操作失败'); }
+        } catch(e) { UI.showToast('操作失败'); }
+      });
+      
+      // 取消管理员
+      document.getElementById('btn-demote-admin')?.addEventListener('click', async () => {
+        try {
+          const resp = await fetch(`/api/chats/${this.currentChat.id}/members/${userId}/role`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId, role: 'member' })
+          });
+          const data = await resp.json();
+          if (data.success) {
+            UI.showToast('已取消管理员');
+            UI.closeModal();
+            this.showChatInfoPanel();
+          } else { UI.showToast(data.error || '操作失败'); }
+        } catch(e) { UI.showToast('操作失败'); }
+      });
+      
+      // 禁言
+      document.getElementById('btn-mute-member')?.addEventListener('click', async () => {
+        try {
+          const resp = await fetch(`/api/chats/${this.currentChat.id}/members/${userId}/mute`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId, isMuted: true })
+          });
+          const data = await resp.json();
+          if (data.success) {
+            UI.showToast('已禁言该成员');
+            UI.closeModal();
+            this.showChatInfoPanel();
+          } else { UI.showToast(data.error || '操作失败'); }
+        } catch(e) { UI.showToast('操作失败'); }
+      });
+      
+      // 解除禁言
+      document.getElementById('btn-unmute-member')?.addEventListener('click', async () => {
+        try {
+          const resp = await fetch(`/api/chats/${this.currentChat.id}/members/${userId}/mute`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUserId, isMuted: false })
+          });
+          const data = await resp.json();
+          if (data.success) {
+            UI.showToast('已解除禁言');
+            UI.closeModal();
+            this.showChatInfoPanel();
+          } else { UI.showToast(data.error || '操作失败'); }
+        } catch(e) { UI.showToast('操作失败'); }
+      });
+      
+      // 移除成员
+      document.getElementById('btn-remove-member')?.addEventListener('click', () => {
+        UI.showConfirm('移除成员', '确定要移除 ' + member.nickname + ' 吗？', async () => {
+          try {
+            const resp = await fetch(`/api/chats/${this.currentChat.id}/members/${userId}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: currentUserId })
+            });
+            const data = await resp.json();
+            if (data.success) {
+              UI.showToast('成员已移除');
+              UI.closeModal();
+              this.showChatInfoPanel();
+            } else { UI.showToast(data.error || '移除失败'); }
+          } catch(e) { UI.showToast('移除失败'); }
+        });
+      });
+    }, 100);
+  },
+  
+  // === 转让群主弹窗 ===
+  showTransferOwnershipModal(members, currentUserId) {
+    const otherMembers = members.filter(m => m.id !== currentUserId);
+    
+    if (otherMembers.length === 0) {
+      UI.showToast('群内没有其他成员可转让');
+      return;
+    }
+    
+    let html = '<div class="transfer-members-list">';
+    otherMembers.forEach(m => {
+      html += '<div class="transfer-member-item" data-user-id="' + m.id + '">';
+      html += '<span class="avatar">' + (UI.avatarMap[m.avatar] || '👤') + '</span>';
+      html += '<span class="name">' + UI.escapeHtml(m.nickname) + '</span>';
+      html += '<span class="role">' + (m.role === 'admin' ? '⚡ 管理员' : '👤 成员') + '</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '<p style="color:var(--text-muted);font-size:12px;margin-top:8px;">⚠️ 转让后你将变为管理员，无法撤回</p>';
+    
+    UI.showModal('转让群主', html, [
+      { text: '取消', class: 'btn-secondary' }
+    ]);
+    
+    // 点击成员选择转让
+    setTimeout(() => {
+      document.querySelectorAll('.transfer-member-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const targetUserId = parseInt(item.dataset.userId);
+          const targetName = item.querySelector('.name').textContent;
+          UI.showConfirm('确认转让', '确定要将群主转让给 ' + targetName + ' 吗？此操作不可撤回。', async () => {
+            try {
+              const resp = await fetch('/api/chats/' + this.currentChat.id + '/transfer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUserId, targetUserId })
+              });
+              const data = await resp.json();
+              if (data.success) {
+                UI.showToast('群主已转让');
+                UI.closeModal();
+                this.closeChat();
+                this.loadChatList();
+              } else { UI.showToast(data.error || '转让失败'); }
+            } catch(e) { UI.showToast('转让失败'); }
+          });
+        });
+      });
+    }, 100);
+  },
   // 关闭所有面板
   closeAllPanels() {
     // 关闭所有工具栏面板
