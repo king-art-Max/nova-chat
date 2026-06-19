@@ -155,11 +155,14 @@ const Chat = {
       this.scrollToBottom();
     });
     
-    // 监听聊天消息滚动
+    // 监听聊天消息滚动 + 点击消息区域关闭面板
     const messagesEl = document.getElementById('chat-messages');
     if (messagesEl) {
       messagesEl.addEventListener('scroll', () => {
         this.handleMessagesScroll();
+      });
+      messagesEl.addEventListener('click', () => {
+        this.closeAllPanels();
       });
     }
   },
@@ -1208,6 +1211,11 @@ const Chat = {
     if (hint) hint.classList.remove('visible');
   },
   closeAllPanels() {
+    const panels = ['emoji-panel', 'translate-panel', 'burn-panel', 'redpacket-panel', 'anonymous-panel'];
+    panels.forEach(id => {
+      const panel = document.getElementById(id);
+      if (panel) panel.classList.add('hidden');
+    });
     document.querySelectorAll('.input-panel').forEach(p => { p.classList.remove('visible'); p.classList.add('hidden'); });
   },
   selectTargetLang(lang) {
@@ -1983,13 +1991,12 @@ Object.assign(Chat, {
     const panel = document.getElementById('translate-panel');
     if (!panel) return;
     
+    const wasOpen = !panel.classList.contains('hidden');
     this.closeAllPanels();
     
-    if (panel.classList.contains('hidden')) {
+    if (!wasOpen) {
       panel.classList.remove('hidden');
       this.renderTranslatePanel();
-    } else {
-      panel.classList.add('hidden');
     }
   },
   
@@ -2077,6 +2084,7 @@ Object.assign(Chat, {
     if (this.isRecording) {
       this.stopRecording();
     } else {
+      this.closeAllPanels();
       await this.startRecording();
     }
   },
@@ -2215,12 +2223,11 @@ Object.assign(Chat, {
     const panel = document.getElementById('burn-panel');
     if (!panel) return;
     
+    const wasOpen = !panel.classList.contains('hidden');
     this.closeAllPanels();
     
-    if (panel.classList.contains('hidden')) {
+    if (!wasOpen) {
       panel.classList.remove('hidden');
-    } else {
-      panel.classList.add('hidden');
     }
   },
   
@@ -2276,13 +2283,22 @@ Object.assign(Chat, {
   
   // 关闭所有面板
   closeAllPanels() {
-    const panels = ['emoji-panel', 'translate-panel', 'burn-panel', 'redpacket-panel'];
+    // 关闭所有工具栏面板
+    const panels = ['emoji-panel', 'translate-panel', 'burn-panel', 'redpacket-panel', 'anonymous-panel'];
     panels.forEach(id => {
       const panel = document.getElementById(id);
-      if (panel && !panel.classList.contains('hidden')) {
+      if (panel) {
         panel.classList.add('hidden');
       }
     });
+    // 同时关闭所有input-panel类元素
+    document.querySelectorAll('.input-panel').forEach(p => {
+      p.classList.add('hidden');
+      p.classList.remove('visible');
+    });
+    // 重置工具栏按钮状态
+    const toolBtns = document.querySelectorAll('.toolbar-btn');
+    toolBtns.forEach(btn => btn.classList.remove('active'));
   }
 });
 

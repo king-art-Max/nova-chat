@@ -10,6 +10,11 @@ let socket = null;
  * 初始化Socket连接
  */
 function initSocket() {
+  // 防止重复创建socket连接
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
   socket = io({
     transports: ['websocket', 'polling']
   });
@@ -91,7 +96,7 @@ const App = {
     // 更新用户信息显示
     this.updateUserInfo();
     
-    // 初始化Socket
+    // 初始化Socket（initSocket内部有防重复机制）
     initSocket();
     
     // 定时轮询好友请求（每10秒）
