@@ -1101,6 +1101,11 @@ async function createAdditionalTables() {
   await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS invite_code VARCHAR(20)`);
   await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS announcement TEXT`);
   await pool.query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS is_muted BOOLEAN DEFAULT FALSE`);
+  
+  // messages表新增字段（阅后即焚/匿踪消息支持）
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS burn_after INTEGER DEFAULT 0`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS burned_at TIMESTAMP`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN DEFAULT FALSE`);
 }
 
 // ==================== SQLite新增表 ====================
@@ -1119,6 +1124,10 @@ async function createAdditionalTablesSQLite() {
   try { sqlDb.run(`ALTER TABLE chats ADD COLUMN invite_code TEXT`); } catch(e) {}
   try { sqlDb.run(`ALTER TABLE chats ADD COLUMN announcement TEXT`); } catch(e) {}
   try { sqlDb.run(`ALTER TABLE chats ADD COLUMN is_muted INTEGER DEFAULT 0`); } catch(e) {}
+  // messages表新增字段
+  try { sqlDb.run('ALTER TABLE messages ADD COLUMN burn_after INTEGER DEFAULT 0'); } catch(e) {}
+  try { sqlDb.run('ALTER TABLE messages ADD COLUMN burned_at TEXT'); } catch(e) {}
+  try { sqlDb.run('ALTER TABLE messages ADD COLUMN is_anonymous INTEGER DEFAULT 0'); } catch(e) {}
 }
 
 // 修改initDatabase函数末尾添加新表创建
