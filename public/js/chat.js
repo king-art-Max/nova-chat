@@ -2652,34 +2652,54 @@ Object.assign(Chat, {
   /**
    * 显示聊天信息面板
    */
-  showChatInfoPanel() {
+  async showChatInfoPanel() {
     if (!this.currentChat) return;
     
-    // 移除旧面板（确保切换聊天时内容更新）
+    // 移除旧面板
     const oldPanel = document.getElementById('chat-info-panel');
     if (oldPanel) oldPanel.remove();
+    
+    // 从服务器获取最新成员数据
+    let members = this.currentChat.members || [];
+    let chatInfo = this.currentChat;
+    if (this.currentChat.type === 'group') {
+      try {
+        const resp = await fetch(`/api/chats/${this.currentChat.id}`);
+        const data = await resp.json();
+        if (data.success) {
+          members = data.members || members;
+          chatInfo = { ...this.currentChat, ...data.chat, members };
+        }
+      } catch (e) { console.error('获取群成员失败:', e); }
+    }
     
     // 创建信息面板
     let panel = document.createElement('div');
     panel.id = 'chat-info-panel';
     panel.className = 'chat-info-panel';
     
-    const chat = this.currentChat;
+    const chat = chatInfo;
     let html = '<div class="panel-header"><h3>聊天信息</h3><button class="btn-icon" id="btn-close-chat-info">✕</button></div>';
     
     if (chat.type === 'group') {
       html += '<div class="panel-section"><div class="panel-label">群组名称</div><div class="panel-value">' + (chat.name || '未命名') + '</div></div>';
-      html += '<div class="panel-section"><div class="panel-label">成员 (' + (chat.members?.length || 0) + ')</div>';
-      if (chat.members) {
+      html += '<div class="panel-section"><div class="panel-label">成员 (' + (members.length || 0) + ')</div>';
+      if (members.length > 0) {
         html += '<div class="member-list">';
-        chat.members.forEach(m => {
-          html += '<div class="member-item"><span class="avatar">' + (UI.avatarMap[m.avatar] || '👤') + '</span><span class="name">' + UI.escapeHtml(m.nickname) + '</span></div>';
+        members.forEach(m => {
+          const isAI = m.galNumber && m.galNumber.startsWith('AI-');
+          const roleLabel = m.role === 'owner' ? ' 👑' : m.role === 'admin' ? ' ⚡' : (isAI ? ' 🤖' : '');
+          html += '<div class="member-item"><span class="avatar">' + (UI.avatarMap[m.avatar] || (isAI ? '🤖' : '👤')) + '</span><span class="name">' + UI.escapeHtml(m.nickname) + roleLabel + '</span></div>';
         });
         html += '</div>';
       }
       html += '</div>';
       // 群组设置入口
       html += '<div class="panel-section"><button class="btn btn-secondary" style="width:100%" id="btn-open-group-settings">⚙️ 群组设置</button></div>';
+      // AI公司专属：召开会议入口
+      if (chat.groupMode === 'ai_company') {
+        html += '<div class="panel-section"><button class="btn btn-primary" style="width:100%" id="btn-trigger-ai-meeting">📋 召开AI会议</button></div>';
+      }
     } else {
       const otherMember = chat.members?.find(m => m.id !== Auth.getCurrentUserId());
       if (otherMember) {
@@ -2718,6 +2738,13 @@ Object.assign(Chat, {
       panel.classList.add('hidden');
       if (window.GroupSettings) {
         GroupSettings.show(this.currentChat.id);
+      }
+    });
+    
+    document.getElementById('btn-trigger-ai-meeting')?.addEventListener('click', () => {
+      panel.classList.add('hidden');
+      if (window.AICompany) {
+        AICompany.showMeeting(this.currentChat.id);
       }
     });
     
@@ -2804,6 +2831,11 @@ Object.assign(Chat, {
       }
     }
     
+    // AI公司群组：所有人可发言，AI会自动回复
+    if (this.currentChat.groupMode === 'ai_company') {
+      return { allowed: true, reason: '' };
+    }
+    
     return { allowed: true, reason: '' };
   },
   
@@ -2823,12 +2855,14 @@ Object.assign(Chat, {
         const modeNames = {
           'open': '开放群',
           'meeting': '会议群',
-          'quiet': '防互扰群'
+          'quiet': '防互扰群',
+          'ai_company': 'AI公司'
         };
         const modeIcons = {
           'open': '🟢',
           'meeting': '🔵',
-          'quiet': '🟣'
+          'quiet': '🟣',
+          'ai_company': '🤖'
         };
         const currentCount = this.currentChat.members?.length || 0;
         statusEl.innerHTML = `${modeIcons[mode] || ''} ${modeNames[mode] || ''} ${currentCount}人`;

@@ -1130,12 +1130,21 @@ const GroupSettings = {
     document.getElementById('member-count').textContent = members.length;
     
     // 设置当前模式
+    const modeSection = document.querySelector('.group-mode-section');
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.classList.remove('selected');
       if (btn.dataset.mode === (chat.groupMode || 'open')) {
         btn.classList.add('selected');
       }
     });
+    // AI公司群组隐藏模式切换（模式固定）
+    if (modeSection) {
+      if (chat.groupMode === 'ai_company') {
+        modeSection.style.display = 'none';
+      } else {
+        modeSection.style.display = '';
+      }
+    }
     
     // 渲染成员列表
     this.renderMembers(members);
@@ -1146,6 +1155,16 @@ const GroupSettings = {
       document.getElementById('invite-code-display').textContent = chat.inviteCode;
     } else {
       document.getElementById('invite-code-section').classList.add('hidden');
+    }
+    
+    // AI公司专属按钮
+    const aiActions = document.getElementById('ai-company-actions');
+    if (aiActions) {
+      if (chat.groupMode === 'ai_company') {
+        aiActions.classList.remove('hidden');
+      } else {
+        aiActions.classList.add('hidden');
+      }
     }
     
     // 群公告预览
@@ -1381,7 +1400,7 @@ const GroupSettings = {
    * 获取模式名称
    */
   getModeName(mode) {
-    const names = { open: '开放群', meeting: '会议群', quiet: '防互扰群' };
+    const names = { open: '开放群', meeting: '会议群', quiet: '防互扰群', ai_company: 'AI公司' };
     return names[mode] || mode;
   }
 };

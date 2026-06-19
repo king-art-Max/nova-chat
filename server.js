@@ -471,6 +471,12 @@ async function startServer() {
       };
       // 通过Socket广播给聊天室的所有成员
       io.to(`chat-${chatId}`).emit('new-message', message);
+      
+      // AI公司群组：自动触发AI回复
+      if (type !== 'self-destruct' && type !== 'red_packet') {
+        triggerAICompanyReply(chatId, senderId, encryptedContent, type, io);
+      }
+      
       res.json({ success: true, message });
     } catch (error) {
       console.error('保存消息失败:', error);
@@ -868,6 +874,125 @@ ${text}` }
 
   // ==================== Socket.io 事件 ====================
 
+// AI公司群组自动回复
+async function triggerAICompanyReply(chatId, senderId, encryptedContent, messageType, io) {
+  try {
+    // 检查是否是AI公司群组
+    const chat = await db.getChatById(chatId);
+    if (!chat || chat.group_mode !== 'ai_company') return;
+    
+    // 获取群成员
+    const members = await db.getChatMembers(chatId);
+    const aiMembers = members.filter(m => m.gal_number && m.gal_number.startsWith('AI-'));
+    
+    // 不为自己发的AI消息触发回复
+    const sender = await db.getUserById(senderId);
+    if (sender && sender.gal_number && sender.gal_number.startsWith('AI-')) return;
+    
+    if (aiMembers.length === 0) return;
+    
+    // 解析消息内容
+    let userMessage = '';
+    try {
+      const parsed = JSON.parse(encryptedContent);
+      userMessage = parsed.content || parsed.plain || encryptedContent;
+    } catch (e) {
+      userMessage = encryptedContent;
+    }
+    
+    // 只对文本和普通消息触发回复，不对图片/语音/文件/红包触发
+    if (messageType && !['normal', 'text', undefined].includes(messageType)) return;
+    
+    // 随机选择1-3个AI回复（模拟会议讨论）
+    const replyCount = Math.min(aiMembers.length, Math.floor(Math.random() * 3) + 1);
+    const shuffled = aiMembers.sort(() => Math.random() - 0.5);
+    const responders = shuffled.slice(0, replyCount);
+    
+    for (const aiMember of responders) {
+      // 每个AI延迟不同时间回复
+      const delay = 1500 + Math.random() * 3000 + responders.indexOf(aiMember) * 2000;
+      
+      setTimeout(async () => {
+        try {
+          const persona = await db.getAIPersona(aiMember.gal_number);
+          if (!persona) return;
+          
+          let replyText = '';
+          
+          if (process.env.DEEPSEEK_API_KEY) {
+            try {
+              const response = await fetch('https://api.deepseek.com/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+                },
+                body: JSON.stringify({
+                  model: 'deepseek-chat',
+                  messages: [
+                    { role: 'system', content: persona.system_prompt },
+                    { role: 'user', content: `在公司群聊中，老板说："${userMessage}"，请从你的岗位角度简短回复（50字以内）。` }
+                  ],
+                  stream: false,
+                  max_tokens: 150
+                })
+              });
+              const data = await response.json();
+              if (data.choices && data.choices[0]) {
+                replyText = data.choices[0].message.content;
+              }
+            } catch (e) {
+              console.error('AI回复API调用失败:', e.message);
+            }
+          }
+          
+          // 降级预设回复
+          if (!replyText) {
+            replyText = getAICompanyFallbackReply(aiMember.gal_number, userMessage);
+          }
+          
+          // 保存AI消息到数据库
+          const aiMessageContent = JSON.stringify({ type: 'ai-reply', content: replyText, plain: replyText });
+          const aiMsgId = await db.saveMessage(chatId, aiMember.id, aiMessageContent, 'normal', null, 0, false);
+          
+          // 广播AI消息
+          io.to(`chat-${chatId}`).emit('new-message', {
+            id: aiMsgId,
+            chatId,
+            senderId: aiMember.id,
+            galNumber: aiMember.gal_number,
+            nickname: persona.name || aiMember.nickname,
+            avatar: aiMember.avatar || 'robot',
+            encryptedContent: aiMessageContent,
+            type: 'normal',
+            isAnonymous: false,
+            isRecalled: false,
+            createdAt: new Date().toISOString()
+          });
+        } catch (e) {
+          console.error('AI自动回复失败:', e.message);
+        }
+      }, delay);
+    }
+  } catch (e) {
+    console.error('triggerAICompanyReply error:', e.message);
+  }
+}
+
+// AI公司降级预设回复
+function getAICompanyFallbackReply(galNumber, userMessage) {
+  const fallbacks = {
+    'AI-CEO000005': '收到，我会统筹安排。大家有什么建议？',
+    'AI-CFO000006': '从财务角度，需要评估预算可行性后给出意见。',
+    'AI-COO000007': '运营方面可以配合执行，具体方案我来制定。',
+    'AI-CMO000008': '这个方向不错，从市场角度我非常支持！',
+    'AI-CTO000009': '技术实现上没有障碍，我安排研发评估。',
+    'AI-LAW000010': '需要确认合规性，建议先做风险评估。',
+    'AI-AUD000011': '我关注执行过程的合规和效率，后续跟踪。'
+  };
+  return fallbacks[galNumber] || '收到，我会跟进处理。';
+}
+
   io.on('connection', (socket) => {
     console.log('🔌 用户连接:', socket.id);
     
@@ -921,6 +1046,12 @@ ${text}` }
         io.to(`chat-${chatId}`).emit('new-message', messageData);
         // 向发送者确认消息已送达服务器
         socket.emit('message-sent', { tempId: data.tempId, messageId: messageId, createdAt: messageData.createdAt });
+        
+        // AI公司群组：自动触发AI回复
+        if (type !== 'self-destruct') {
+          triggerAICompanyReply(chatId, senderId, encryptedContent, type, io);
+        }
+        
         if (type === 'self-destruct' && ttl) {
           setTimeout(async () => {
             await db.deleteMessage(messageId);
