@@ -376,29 +376,133 @@ const UI = {
     const isOnline = onlineUsers.has(contact.id);
     const isStarred = contact.isStarred || false;
     
+    // 列表项只显示头像+名字+GAL号，操作按钮移到详情页
     return `
       <div class="contact-item ${isStarred ? 'starred' : ''}" data-contact-id="${contact.id}" data-gal="${contact.galNumber}" data-starred="${isStarred}">
         ${this.getAvatar(contact.avatar || 'astronaut', isOnline)}
+        
         <div class="contact-item-info">
           <div class="contact-item-name">${this.escapeHtml(contact.nickname)}</div>
           <div class="contact-item-gal">${this.formatGalNumber(contact.galNumber)}</div>
         </div>
-        <div class="contact-item-actions">
-          ${isPending ? `
+        
+        ${isPending ? `
+          <div class="contact-item-actions">
             <button class="btn btn-primary btn-accept">接受</button>
-          ` : isSent ? `
+          </div>
+        ` : isSent ? `
+          <div class="contact-item-actions">
             <span style="color:var(--text-muted);font-size:12px;">等待对方接受</span>
-          ` : `
-            <button class="btn btn-secondary btn-chat">聊天</button>
-            <button class="btn-star ${isStarred ? 'active' : ''}" title="${isStarred ? '取消收藏' : '收藏'}">
-              ${isStarred ? '❤️' : '🤍'}
-            </button>
-            <button class="btn-delete" title="删除">🗑️</button>
-          `}
-        </div>
+          </div>
+        ` : `
+          <div class="contact-item-arrow">›</div>
+        `}
       </div>
     `;
   },
+  
+  /** 显示联系人详情弹窗 */
+  showContactDetail(contact) {
+    const isOnline = onlineUsers.has(contact.id);
+    const isStarred = contact.isStarred || false;
+    
+    const modal = document.createElement('div');
+    modal.className = 'contact-detail-overlay';
+    modal.innerHTML = `
+      <div class="contact-detail-sheet">
+        <div class="contact-detail-handle"></div>
+        <div class="contact-detail-header">
+          <div class="contact-detail-avatar">${this.getAvatar(contact.avatar || 'astronaut', isOnline)}</div>
+          <div class="contact-detail-name">${this.escapeHtml(contact.nickname)}</div>
+          <div class="contact-detail-gal">${this.formatGalNumber(contact.galNumber)}</div>
+          ${isOnline ? '<div class="contact-detail-online">在线</div>' : '<div class="contact-detail-offline">离线</div>'}
+        </div>
+        <div class="contact-detail-actions">
+          <button class="contact-detail-btn btn-chat" data-id="${contact.id}">
+            <span class="detail-btn-icon">💬</span>
+            <span>发消息</span>
+          </button>
+          <button class="contact-detail-btn btn-star-toggle ${isStarred ? 'starred' : ''}" data-id="${contact.id}" data-starred="${isStarred}">
+            <span class="detail-btn-icon">${isStarred ? '❤️' : '🤍'}</span>
+            <span>${isStarred ? '取消收藏' : '收藏'}</span>
+          </button>
+          <button class="contact-detail-btn btn-danger btn-delete-contact" data-id="${contact.id}" data-name="${this.escapeHtml(contact.nickname)}">
+            <span class="detail-btn-icon">🗑️</span>
+            <span>删除联系人</span>
+          </button>
+        </div>
+        <button class="contact-detail-close">关闭</button>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // 动画进入
+    requestAnimationFrame(() => modal.classList.add('active'));
+    
+    // 关闭
+    const closeSheet = () => {
+      modal.classList.remove('active');
+      setTimeout(() => modal.remove(), 300);
+    };
+    
+    modal.querySelector('.contact-detail-close').onclick = closeSheet;
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeSheet();
+    });
+    
+    // 发消息
+    modal.querySelector('.btn-chat').onclick = () => {
+      closeSheet();
+      if (window.Contacts) {
+        window.Contacts.checkQuietModeAndStartChat(contact.id, contact);
+      }
+    };
+    
+    // 收藏
+    modal.querySelector('.btn-star-toggle').onclick = async () => {
+      const btn = modal.querySelector('.btn-star-toggle');
+      const wasStarred = btn.dataset.starred === 'true';
+      try {
+        const resp = await fetch('/api/contacts/' + contact.id + '/star', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isStarred: !wasStarred })
+        });
+        if (resp.ok) {
+          btn.dataset.starred = (!wasStarred).toString();
+          btn.querySelector('.detail-btn-icon').textContent = wasStarred ? '🤍' : '❤️';
+          btn.querySelector('span:last-child').textContent = wasStarred ? '收藏' : '取消收藏';
+          btn.classList.toggle('starred', !wasStarred);
+          UI.showToast(wasStarred ? '已取消收藏' : '已收藏 ❤️');
+          if (window.Contacts) window.Contacts.loadContacts();
+        }
+      } catch (e) { UI.showToast('操作失败'); }
+    };
+    
+    // 删除
+    modal.querySelector('.btn-delete-contact').onclick = () => {
+      const name = modal.querySelector('.btn-delete-contact').dataset.name;
+      UI.showConfirm('删除联系人', '确定要删除与"' + name + '"的好友关系吗？', async () => {
+        try {
+          const resp = await fetch('/api/contacts/' + contact.id, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: window.Auth ? Auth.getCurrentUserId() : null })
+          });
+          const data = await resp.json();
+          if (data.success) {
+            UI.showToast('联系人已删除');
+            closeSheet();
+            if (window.Contacts) window.Contacts.loadContacts();
+          } else {
+            UI.showToast(data.error || '删除失败');
+          }
+        } catch (e) { UI.showToast('删除失败'); }
+      });
+    };
+  },
+  
   
   /**
    * 渲染AI人格卡片

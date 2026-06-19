@@ -622,7 +622,7 @@ const Contacts = {
     
     // 绑定事件
     container.querySelectorAll('.contact-item').forEach(item => {
-      // 接受好友请求
+      // 接受好友请求（仍保留在列表项上）
       const acceptBtn = item.querySelector('.btn-accept');
       if (acceptBtn) {
         acceptBtn.addEventListener('click', (e) => {
@@ -632,60 +632,17 @@ const Contacts = {
           acceptBtn.disabled = true;
           this.acceptRequest(parseInt(item.dataset.contactId));
         });
+        return; // pending状态不弹详情
       }
       
-      // 开始聊天
-      const chatBtn = item.querySelector('.btn-chat');
-      if (chatBtn) {
-        chatBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const contact = this.contacts.find(c => c.id === parseInt(item.dataset.contactId));
-          if (contact) {
-            // 检查是否是防互扰群成员私聊
-            this.checkQuietModeAndStartChat(contact.id, contact);
-          }
-        });
-      }
-      
-      // 收藏/取消收藏
-      const starBtn = item.querySelector('.btn-star');
-      if (starBtn) {
-        starBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const contactId = parseInt(item.dataset.contactId);
-          const isStarred = item.dataset.starred === 'true';
-          fetch('/api/contacts/' + contactId + '/star', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ isStarred: !isStarred })
-          }).then(() => {
-            this.loadContacts();
-            UI.showToast(isStarred ? '已取消收藏' : '已收藏 ❤️');
-          }).catch(() => UI.showToast('操作失败'));
-        });
-      }
-      
-      // 删除联系人
-      const deleteBtn = item.querySelector('.btn-delete');
-      if (deleteBtn) {
-        deleteBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const contactId = parseInt(item.dataset.contactId);
-          const contactName = item.querySelector('.contact-item-name')?.textContent || '该联系人';
-          UI.showConfirm('删除联系人', '确定要删除与"' + contactName + '"的好友关系吗？', async () => {
-            try {
-              const response = await fetch('/api/contacts/' + contactId, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: Auth.getCurrentUserId() })
-              });
-              const data = await response.json();
-              if (data.success) { UI.showToast('联系人已删除'); this.loadContacts(); }
-              else { UI.showToast(data.error || '删除失败'); }
-            } catch (e) { UI.showToast('删除失败'); }
-          });
-        });
-      }
+      // 点击已接受联系人 → 弹出详情页
+      item.addEventListener('click', () => {
+        const contactId = parseInt(item.dataset.contactId);
+        const contact = this.contacts.find(c => c.id === contactId);
+        if (contact) {
+          UI.showContactDetail(contact);
+        }
+      });
     });
   },
   

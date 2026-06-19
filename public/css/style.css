@@ -5585,3 +5585,135 @@ ul, ol {
   margin-top: 16px;
 }
 .member-detail-actions .btn { width: 100%; }
+
+/* ==================== 联系人列表箭头 ==================== */
+.contact-item-arrow {
+  color: var(--text-muted);
+  font-size: 20px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ==================== 联系人详情弹窗 ==================== */
+.contact-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 10000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.contact-detail-overlay.active {
+  opacity: 1;
+}
+.contact-detail-sheet {
+  background: var(--bg-primary);
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  padding: 16px 20px 32px;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  overflow-y: auto;
+}
+.contact-detail-overlay.active .contact-detail-sheet {
+  transform: translateY(0);
+}
+.contact-detail-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--text-muted);
+  border-radius: 2px;
+  margin: 0 auto 20px;
+  opacity: 0.4;
+}
+.contact-detail-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.contact-detail-avatar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.contact-detail-avatar .avatar {
+  width: 72px !important;
+  height: 72px !important;
+  font-size: 36px !important;
+}
+.contact-detail-name {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.contact-detail-gal {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-family: monospace;
+  margin-bottom: 8px;
+}
+.contact-detail-online {
+  font-size: 12px;
+  color: var(--accent-green);
+}
+.contact-detail-offline {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.contact-detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.contact-detail-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: none;
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+  width: 100%;
+  text-align: left;
+}
+.contact-detail-btn:hover {
+  background: var(--bg-tertiary);
+}
+.contact-detail-btn:active {
+  transform: scale(0.98);
+}
+.detail-btn-icon {
+  font-size: 20px;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.contact-detail-btn.btn-danger {
+  color: #ff4444;
+}
+.contact-detail-btn.btn-danger:hover {
+  background: rgba(255,68,68,0.1);
+}
+.contact-detail-close {
+  width: 100%;
+  padding: 14px;
+  background: var(--bg-card);
+  border: none;
+  border-radius: 12px;
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.contact-detail-close:hover {
+  background: var(--bg-tertiary);
+}

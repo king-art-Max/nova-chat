@@ -737,6 +737,34 @@ async function getChats(userId) {
   );
 }
 
+async function ensureContactPair(userId1, userId2) {
+  // 确保双向联系人关系存在且为accepted
+  const existing = await queryOne(
+    'SELECT * FROM contacts WHERE (user_id = ? AND contact_id = ?) OR (user_id = ? AND contact_id = ?)',
+    [userId1, userId2, userId2, userId1]
+  );
+
+  if (!existing) {
+    // 双向添加，直接accepted
+    await runSql('INSERT INTO contacts (user_id, contact_id, status) VALUES (?, ?, \'accepted\')', [userId1, userId2]);
+    await runSql('INSERT INTO contacts (user_id, contact_id, status) VALUES (?, ?, \'accepted\')', [userId2, userId1]);
+  } else {
+    // 已存在但可能不是双向或未accepted，补齐
+    const dir1 = await queryOne('SELECT * FROM contacts WHERE user_id = ? AND contact_id = ?', [userId1, userId2]);
+    const dir2 = await queryOne('SELECT * FROM contacts WHERE user_id = ? AND contact_id = ?', [userId2, userId1]);
+    if (!dir1) {
+      await runSql('INSERT INTO contacts (user_id, contact_id, status) VALUES (?, ?, \'accepted\')', [userId1, userId2]);
+    } else if (dir1.status !== 'accepted') {
+      await runSql('UPDATE contacts SET status = \'accepted\' WHERE user_id = ? AND contact_id = ?', [userId1, userId2]);
+    }
+    if (!dir2) {
+      await runSql('INSERT INTO contacts (user_id, contact_id, status) VALUES (?, ?, \'accepted\')', [userId2, userId1]);
+    } else if (dir2.status !== 'accepted') {
+      await runSql('UPDATE contacts SET status = \'accepted\' WHERE user_id = ? AND contact_id = ?', [userId2, userId1]);
+    }
+  }
+}
+
 async function createPrivateChat(userId1, userId2) {
   const existing = await queryOne(
     `SELECT c.id FROM chats c
@@ -747,6 +775,8 @@ async function createPrivateChat(userId1, userId2) {
   );
 
   if (existing) {
+    // 即使聊天已存在，也确保联系人在列表中
+    await ensureContactPair(userId1, userId2);
     return existing.id;
   }
 
@@ -754,6 +784,9 @@ async function createPrivateChat(userId1, userId2) {
   const chatId = result.lastInsertRowid;
   await runSql('INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, \'member\')', [chatId, userId1]);
   await runSql('INSERT INTO chat_members (chat_id, user_id, role) VALUES (?, ?, \'member\')', [chatId, userId2]);
+
+  // 自动建立双向联系人关系
+  await ensureContactPair(userId1, userId2);
 
   return chatId;
 }
