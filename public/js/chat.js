@@ -765,124 +765,115 @@ const Chat = {
   async displayMessage(message, isSent = false) {
     try {
     const messagesEl = document.getElementById('chat-messages');
+    if (!messagesEl) return;
+    
     const messageEl = document.createElement('div');
     messageEl.className = `message ${isSent ? 'sent' : 'received'} ${message.type || ''}`;
-    messageEl.dataset.messageId = message.id;
-    messageEl.dataset.senderId = message.senderId;
+    messageEl.dataset.messageId = message.id || '';
+    messageEl.dataset.senderId = message.senderId || '';
     
-    // 检查是否需要添加时间分割线
-    const messages = this.chatMessages[this.currentChat?.id] || [];
-    const msgIndex = messages.indexOf(message);
-    const prevMsg = msgIndex > 0 ? messages[msgIndex - 1] : null;
-    if (this.shouldShowTimeDivider(message, prevMsg)) {
-      this.addTimeDivider(messagesEl, message.createdAt || message.created_at);
-    }
+    // 时间分割线
+    try {
+      const messages = this.chatMessages[this.currentChat?.id] || [];
+      const msgIndex = messages.indexOf(message);
+      const prevMsg = msgIndex > 0 ? messages[msgIndex - 1] : null;
+      if (this.shouldShowTimeDivider && this.shouldShowTimeDivider(message, prevMsg)) {
+        this.addTimeDivider(messagesEl, message.createdAt || message.created_at);
+      }
+    } catch(e) {}
     
-    // 长按收藏消息
-    let msgPressTimer;
-    messageEl.addEventListener('touchstart', (e) => {
-      msgPressTimer = setTimeout(() => {
-        if (window.Collection && content) {
-          Collection.add(content, message.senderId === Auth.getCurrentUserId() ? '我' : '对方');
-        }
-      }, 600);
-    });
-    messageEl.addEventListener('touchend', () => clearTimeout(msgPressTimer));
-    messageEl.addEventListener('touchmove', () => clearTimeout(msgPressTimer));
-    
-    // 检查是否已撤回
-    const isRecalled = message.isRecalled || message.encryptedContent === '[此消息已撤回]';
-    
-    // 解密消息内容
-    let content = message.encryptedContent;
+    // 解析消息内容 - 每一步都独立try-catch，绝不崩
+    let content = '';
     let isEncrypted = false;
+    let isImage = false;
+    let isRecalled = false;
+    
+    // 撤回检查
+    try {
+      isRecalled = !!(message.isRecalled || message.encrypted_content === '[此消息已撤回]' || message.encryptedContent === '[此消息已撤回]');
+    } catch(e) {}
     
     if (isRecalled) {
       content = '此消息已撤回';
-    } else if (message.encryptedContent) {
-      try {
-        // 检查是否为加密格式 (iv:ciphertext:publicKey)
-        if (message.encryptedContent.includes(':') && !message.encryptedContent.startsWith('{')) {
-          const parts = message.encryptedContent.split(':');
-          if (parts.length >= 2) {
-            isEncrypted = true;
-            const [iv, ciphertext, senderPublicKey] = parts;
-            
-            // 从缓存或消息中获取发送者公钥
-            let senderKey = this.userPublicKeys[message.senderId];
-            if (!senderKey && senderPublicKey) {
-              try {
-                senderKey = JSON.parse(senderPublicKey);
-                this.userPublicKeys[message.senderId] = senderKey;
-              } catch (e) {}
+    } else {
+      const raw = message.encryptedContent || message.encrypted_content || '';
+      content = raw; // 默认显示原始内容
+      
+      if (raw) {
+        try {
+          if (raw.startsWith('{')) {
+            // JSON格式
+            const parsed = JSON.parse(raw);
+            if (parsed.type === 'image' && parsed.content) {
+              content = parsed.content;
+              isImage = true;
+            } else if (parsed.plain && parsed.content) {
+              content = parsed.content;
+            } else if (parsed.content) {
+              content = String(parsed.content);
             }
-            
-            if (senderKey && NovaCrypto && NovaCrypto.privateKey) {
-              content = await NovaCrypto.decryptMessage(iv, ciphertext, senderKey);
-            } else {
-              // 没有密钥，显示明文提示
-              content = '🔒 加密消息（无法解密）';
+          } else if (raw.includes(':') && !raw.startsWith('[') && raw.length > 50) {
+            // 可能是加密格式 iv:ciphertext:publicKey
+            const parts = raw.split(':');
+            if (parts.length >= 2 && parts[0].length > 10) {
+              isEncrypted = true;
+              const iv = parts[0];
+              const ciphertext = parts[1];
+              const senderPublicKey = parts.slice(2).join(':');
+              
+              let senderKey = null;
+              try { senderKey = this.userPublicKeys[message.senderId]; } catch(e) {}
+              if (!senderKey && senderPublicKey) {
+                try { senderKey = JSON.parse(senderPublicKey); this.userPublicKeys[message.senderId] = senderKey; } catch(e) {}
+              }
+              
+              if (senderKey && window.NovaCrypto && NovaCrypto.privateKey) {
+                try {
+                  content = await NovaCrypto.decryptMessage(iv, ciphertext, senderKey);
+                  isEncrypted = true;
+                } catch(decErr) {
+                  content = '🔒 加密消息';
+                }
+              } else {
+                content = '🔒 加密消息';
+              }
             }
           }
-        } else if (message.encryptedContent.startsWith('{')) {
-          // JSON格式，可能是图片或其他类型
-          const parsed = JSON.parse(message.encryptedContent);
-          if (parsed.type === 'image' && parsed.content) {
-            // 图片消息
-            content = parsed.content;
-            message.isImage = true;
-          } else if (parsed.plain) {
-            // 明文消息
-            content = parsed.content;
-          } else {
-            content = parsed.content || parsed;
-          }
-        } else {
-          // 普通文本消息
-          content = message.encryptedContent;
+          // 否则就是普通文本，content = raw
+        } catch(parseErr) {
+          content = raw; // 解析失败显示原始内容
         }
-      } catch (error) {
-        console.error('解密消息失败:', error);
-        content = message.encryptedContent;
       }
     }
     
-    // 匿踪消息显示特殊发送者
-    const senderName = message.type === 'anonymous' ? '来自星星的你' : message.nickname;
+    // 发送者名称
+    let senderName = '';
+    try { senderName = message.type === 'anonymous' ? '来自星星的你' : (message.nickname || message.galNumber || '未知'); } catch(e) { senderName = '未知'; }
     
-    // 构建消息HTML
+    // 时间格式化
+    let timeStr = '';
+    try { timeStr = UI.formatFullTime(message.createdAt || message.created_at); } catch(e) { timeStr = ''; }
+    
+    // 构建HTML
     let messageHTML = '';
     
     if (!isSent) {
-      messageHTML += `
-        <div class="message-header">
-          <span class="message-sender">${senderName}</span>
-          ${isEncrypted ? '<span class="encrypt-icon">🔒</span>' : ''}
-          <span class="message-time">${UI.formatFullTime(message.createdAt)}</span>
-        </div>
-      `;
+      messageHTML += `<div class="message-header"><span class="message-sender">${senderName}</span>${isEncrypted ? '<span class="encrypt-icon">🔒</span>' : ''}<span class="message-time">${timeStr}</span></div>`;
     } else {
-      messageHTML += `
-        <div class="message-header">
-          ${isEncrypted ? '<span class="encrypt-icon">🔒</span>' : ''}
-          <span class="message-time">${UI.formatFullTime(message.createdAt)}</span>
-        </div>
-      `;
+      messageHTML += `<div class="message-header">${isEncrypted ? '<span class="encrypt-icon">🔒</span>' : ''}<span class="message-time">${timeStr}</span></div>`;
     }
     
     // 消息内容
     if (isRecalled) {
       messageHTML += `<div class="message-content recalled">${UI.escapeHtml(content)}</div>`;
-    } else if (message.isImage) {
-      messageHTML += `
-        <div class="message-content">
-          <img src="${content}" class="chat-image" onclick="Chat.previewImage('${content}')">
-        </div>
-      `;
+    } else if (isImage) {
+      messageHTML += `<div class="message-content"><img src="${content}" class="chat-image" onclick="Chat.previewImage('${content}')"></div>`;
     } else {
-      messageHTML += `<div class="message-content">${UI.escapeHtml(content)}</div>`;
+      const safeContent = typeof UI !== 'undefined' && UI.escapeHtml ? UI.escapeHtml(content) : content.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      messageHTML += `<div class="message-content">${safeContent}</div>`;
     }
     
+    // 发送状态
     if (isSent) {
       const status = this.messageStatus[message.id] || 'sent';
       let statusIcon = '✓';
@@ -894,46 +885,50 @@ const Chat = {
     
     messageEl.innerHTML = messageHTML;
     
-    // 添加销毁进度条（如果需要）
-    if (message.type === 'self-destruct' && message.ttl && !isRecalled) {
-      const progressBar = document.createElement('div');
-      progressBar.className = 'destroy-progress';
-      progressBar.style.animationDuration = `${message.ttl}s`;
-      messageEl.appendChild(progressBar);
-      
-      // 设置定时销毁
-      setTimeout(() => {
-        this.destroyMessage(message.id);
-      }, message.ttl * 1000);
-    }
+    // 阅后即焚进度条
+    try {
+      if (message.type === 'self-destruct' && message.ttl && !isRecalled) {
+        const progressBar = document.createElement('div');
+        progressBar.className = 'destroy-progress';
+        progressBar.style.animationDuration = `${message.ttl}s`;
+        messageEl.appendChild(progressBar);
+        setTimeout(() => { this.destroyMessage(message.id); }, message.ttl * 1000);
+      }
+    } catch(e) {}
     
-    // 添加点击弹出操作菜单
-    if (!isRecalled) {
-      messageEl.addEventListener('click', (e) => {
-        // 避免图片预览触发菜单
-        if (e.target.tagName === 'IMG') return;
-        this.showMessageMenu(messageEl, message, isSent);
-      });
-    }
+    // 点击菜单
+    try {
+      if (!isRecalled) {
+        messageEl.addEventListener('click', (e) => {
+          if (e.target.tagName === 'IMG') return;
+          this.showMessageMenu(messageEl, message, isSent);
+        });
+      }
+    } catch(e) {}
     
     messagesEl.appendChild(messageEl);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     
     // 标记已读
-    if (!isSent && message.id) {
-      window.socket.emit('message-read', {
-        messageId: message.id,
-        chatId: this.currentChat?.id,
-        userId: Auth.getCurrentUserId()
-      });
-    }
+    try {
+      if (!isSent && message.id && window.socket && window.socket.connected) {
+        window.socket.emit('message-read', {
+          messageId: message.id,
+          chatId: this.currentChat?.id,
+          userId: Auth.getCurrentUserId()
+        });
+      }
+    } catch(e) {}
+    
     } catch (displayErr) {
-      console.warn('displayMessage渲染失败:', displayErr);
+      // 最终兜底：绝不崩溃，显示原始内容
       try {
         const messagesEl = document.getElementById('chat-messages');
         const errEl = document.createElement('div');
         errEl.className = 'message received';
-        errEl.innerHTML = '<div class="message-content">消息渲染异常</div>';
+        const raw = message.encryptedContent || message.encrypted_content || '...';
+        const safe = raw.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        errEl.innerHTML = `<div class="message-content">${safe}</div>`;
         messagesEl.appendChild(errEl);
       } catch(e) {}
     }
