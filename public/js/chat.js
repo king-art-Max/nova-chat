@@ -683,14 +683,19 @@ const Chat = {
         let lastDate = null;
         
         for (const message of messages) {
-          // 检查是否需要添加日期分割线
-          const messageDate = new Date(message.createdAt || message.created_at).toDateString();
-          if (messageDate !== lastDate) {
-            this.addDateDivider(messagesEl, message.createdAt || message.created_at);
-            lastDate = messageDate;
+          try {
+            // 检查是否需要添加日期分割线
+            const messageDate = new Date(message.createdAt || message.created_at).toDateString();
+            if (messageDate !== lastDate) {
+              this.addDateDivider(messagesEl, message.createdAt || message.created_at);
+              lastDate = messageDate;
+            }
+            
+            await this.displayMessage(message, message.senderId === Auth.getCurrentUserId());
+          } catch (msgErr) {
+            console.warn('单条消息渲染失败，跳过:', msgErr);
+            // 单条失败不影响其他消息显示
           }
-          
-          await this.displayMessage(message, message.senderId === Auth.getCurrentUserId());
         }
         
         // 滚动到底部
@@ -758,6 +763,7 @@ const Chat = {
    * 显示消息
    */
   async displayMessage(message, isSent = false) {
+    try {
     const messagesEl = document.getElementById('chat-messages');
     const messageEl = document.createElement('div');
     messageEl.className = `message ${isSent ? 'sent' : 'received'} ${message.type || ''}`;
@@ -920,6 +926,16 @@ const Chat = {
         chatId: this.currentChat?.id,
         userId: Auth.getCurrentUserId()
       });
+    }
+    } catch (displayErr) {
+      console.warn('displayMessage渲染失败:', displayErr);
+      try {
+        const messagesEl = document.getElementById('chat-messages');
+        const errEl = document.createElement('div');
+        errEl.className = 'message received';
+        errEl.innerHTML = '<div class="message-content">消息渲染异常</div>';
+        messagesEl.appendChild(errEl);
+      } catch(e) {}
     }
   },
   
@@ -1466,18 +1482,18 @@ const Chat = {
     const ttl = null;
     const burnAfter = isDestroy ? this.burnSeconds : 0;
     
+    // ===== 第一步：构造并发送消息（只有这一步失败才报"发送失败"） =====
+    let encryptedContent = content;
+    let sendSucceeded = false;
+    let tempId = 'local-' + Date.now();
+    
     try {
-      // 构造消息内容
-      let encryptedContent = content;
-      let isEncrypted = false;
-      
       // 尝试加密（私聊且非匿踪）
       if (!isAnonymous && this.currentChat.type !== 'group') {
         try {
           const otherMember = this.currentChat.members?.find(m => m.id !== Auth.getCurrentUserId());
           
           if (otherMember) {
-            // 获取对方公钥
             let recipientKey = this.userPublicKeys[otherMember.id];
             
             if (!recipientKey && otherMember.publicKey) {
@@ -1490,13 +1506,10 @@ const Chat = {
             }
             
             if (recipientKey && NovaCrypto && NovaCrypto.privateKey) {
-              // 进行加密
               const encrypted = await NovaCrypto.encryptMessage(content, recipientKey);
               const senderPublicKey = JSON.stringify(NovaCrypto.publicKeyJwk);
               encryptedContent = `${encrypted.iv}:${encrypted.ciphertext}:${senderPublicKey}`;
-              isEncrypted = true;
             } else {
-              // 无法加密，发送明文
               encryptedContent = JSON.stringify({ plain: true, content });
             }
           } else {
@@ -1507,7 +1520,6 @@ const Chat = {
           encryptedContent = JSON.stringify({ plain: true, content });
         }
       } else if (this.currentChat.type === 'group') {
-        // 群聊不加密
         encryptedContent = JSON.stringify({ plain: true, content });
       }
       
@@ -1524,18 +1536,20 @@ const Chat = {
       
       // 附加引用消息
       if (this.quotedMessage) {
-        message.quotedContent = this.quotedMessage.encryptedContent?.substring(0, 50) || '';
-        message.quotedSender = this.quotedMessage.nickname || '对方';
-        this.cancelQuote();
+        try {
+          message.quotedContent = this.quotedMessage.encryptedContent?.substring(0, 50) || '';
+          message.quotedSender = this.quotedMessage.nickname || '对方';
+          this.cancelQuote();
+        } catch (e) { /* 引用非关键 */ }
       }
       
-      // 通过Socket发送
-      const tempId = 'local-' + Date.now();
       message.tempId = tempId;
+      
+      // 发送消息
       if (window.socket && window.socket.connected) {
         window.socket.emit('send-message', message);
+        sendSucceeded = true;
       } else {
-        // Socket未连接时用HTTP API
         console.warn('Socket未连接，使用HTTP发送');
         const response = await fetch(`/api/chats/${message.chatId}/messages`, {
           method: 'POST',
@@ -1546,43 +1560,53 @@ const Chat = {
         if (!result.success) {
           throw new Error(result.error || 'HTTP发送失败');
         }
+        sendSucceeded = true;
       }
-      
-      // 立即在本地显示消息
+    } catch (sendError) {
+      console.error('消息发送失败:', sendError);
+      UI.showToast('发送失败，请重试');
+      return;
+    }
+    
+    // ===== 第二步：更新本地UI（即使失败也不影响发送成功） =====
+    try {
       const localMessage = {
         id: tempId,
-        chatId: message.chatId,
+        chatId: this.currentChat.id,
         senderId: Auth.getCurrentUserId(),
         galNumber: Auth.currentUser?.galNumber || '',
         nickname: Auth.currentUser?.nickname || '',
         encryptedContent: content,
-        type: message.type,
-        ttl: message.ttl,
-        burnAfter: message.burnAfter,
-        isAnonymous: message.isAnonymous,
+        type: isAnonymous ? 'anonymous' : (isDestroy ? 'self-destruct' : 'normal'),
+        ttl,
+        burnAfter,
+        isAnonymous,
         createdAt: new Date().toISOString()
       };
-      // 标记消息状态为"已发送"
       this.messageStatus[tempId] = 'sent';
       this.displayMessage(localMessage, true);
       
-      if (!this.chatMessages[message.chatId]) {
-        this.chatMessages[message.chatId] = [];
+      if (!this.chatMessages[localMessage.chatId]) {
+        this.chatMessages[localMessage.chatId] = [];
       }
-      this.chatMessages[message.chatId].push(localMessage);
+      this.chatMessages[localMessage.chatId].push(localMessage);
       
       input.value = '';
       
       if (isDestroy) {
-        document.getElementById('btn-destroy').classList.remove('active');
-        document.getElementById('destroy-timer').classList.add('hidden');
+        const btnDestroy = document.getElementById('btn-destroy');
+        const destroyTimer = document.getElementById('destroy-timer');
+        if (btnDestroy) btnDestroy.classList.remove('active');
+        if (destroyTimer) destroyTimer.classList.add('hidden');
       }
-      
-      try { this.sendStopTyping(); } catch(e) { /* 非关键 */ }
-    } catch (error) {
-      console.error('发送消息失败:', error);
-      UI.showToast('发送失败，请重试');
+    } catch (uiError) {
+      console.warn('UI更新失败（消息已发送）:', uiError);
+      // 消息已发送成功，UI失败不影响
+      input.value = '';
     }
+    
+    // ===== 第三步：非关键操作 =====
+    try { this.sendStopTyping(); } catch(e) {}
   },
   
   /**
