@@ -154,6 +154,7 @@ const App = {
     if (menuSecurity) {
       menuSecurity.addEventListener('click', () => {
         UI.showSecurityPage();
+        if (window.AppState) AppState.enterSecurity();
       });
     }
     
@@ -162,6 +163,7 @@ const App = {
     if (securityBack) {
       securityBack.addEventListener('click', () => {
         UI.backToProfile();
+        if (window.AppState) AppState.inSecurity = false;
       });
     }
     
@@ -176,15 +178,51 @@ const App = {
       });
     });
     
-    // 安全设置开关状态保存
+    // 安全设置开关状态保存 + UI更新
     document.querySelectorAll('.sc-toggle input').forEach(toggle => {
       toggle.addEventListener('change', (e) => {
         const card = e.target.closest('.security-card');
         const module = card?.dataset.module;
         if (module) {
           localStorage.setItem(`security_${module}`, e.target.checked);
+          // 更新状态文字
+          const statusEl = card?.querySelector('.sc-status');
+          if (statusEl) {
+            if (e.target.checked) {
+              statusEl.textContent = '已启用';
+              statusEl.classList.add('enabled');
+              statusEl.classList.remove('disabled');
+            } else {
+              statusEl.textContent = '已禁用';
+              statusEl.classList.remove('enabled');
+              statusEl.classList.add('disabled');
+            }
+          }
+          // 模块特定逻辑
+          if (module === 'anti-scan') {
+            const ipEl = document.getElementById('sec-ip-mix');
+            const metaEl = document.getElementById('sec-meta-clean');
+            const behEl = document.getElementById('sec-behavior-prot');
+            if (ipEl) ipEl.textContent = e.target.checked ? '开启' : '关闭';
+            if (metaEl) metaEl.textContent = e.target.checked ? '开启' : '关闭';
+            if (behEl) behEl.textContent = e.target.checked ? '开启' : '关闭';
+          }
+          if (module === 'wallet-lock') {
+            const pwdEl = document.getElementById('sec-wallet-pwd');
+            if (pwdEl) pwdEl.textContent = e.target.checked ? '已启用' : '未启用';
+          }
         }
       });
+    });
+    
+    // 恢复安全设置开关状态
+    document.querySelectorAll('.sc-toggle input').forEach(toggle => {
+      const card = toggle.closest('.security-card');
+      const module = card?.dataset.module;
+      if (module) {
+        const saved = localStorage.getItem(`security_${module}`);
+        if (saved !== null) toggle.checked = saved === 'true';
+      }
     });
     
     // 联系人搜索
@@ -267,29 +305,29 @@ const App = {
           <span class="settings-text">编辑资料</span>
           <span class="settings-arrow">›</span>
         </div>
-        <div class="settings-menu-item" onclick="App.showSecuritySettings()">
+        <div class="settings-menu-item" onclick="UI.showPage('security'); AppState.enterSecurity()">
           <span class="settings-icon">🔐</span>
           <span class="settings-text">安全设置</span>
           <span class="settings-arrow">›</span>
         </div>
-        <div class="settings-menu-item" onclick="App.showStarWallet()">
+        <div class="settings-menu-item" onclick="MenuFunctions.showWallet()">
           <span class="settings-icon">💎</span>
           <span class="settings-text">星币钱包</span>
           <span class="settings-value">${localStorage.getItem('nova_star_coins') || 1000}</span>
           <span class="settings-arrow">›</span>
         </div>
-        <div class="settings-menu-item" onclick="App.showMyCollections()">
+        <div class="settings-menu-item" onclick="MenuFunctions.showStarred()">
           <span class="settings-icon">⭐</span>
           <span class="settings-text">我的收藏</span>
           <span class="settings-value" id="collection-count">${(JSON.parse(localStorage.getItem('nova_collections') || '[]')).length}</span>
           <span class="settings-arrow">›</span>
         </div>
-        <div class="settings-menu-item" onclick="App.showAbout()">
+        <div class="settings-menu-item" onclick="MenuFunctions.showAbout()">
           <span class="settings-icon">ℹ️</span>
           <span class="settings-text">关于Nova-OS</span>
           <span class="settings-arrow">›</span>
         </div>
-        <div class="settings-menu-item danger" onclick="App.clearCache()">
+        <div class="settings-menu-item danger" onclick="MenuFunctions.clearCache()">
           <span class="settings-icon">🗑️</span>
           <span class="settings-text">清除缓存</span>
           <span class="settings-arrow">›</span>
@@ -607,6 +645,46 @@ const Contacts = {
           }
         });
       }
+      
+      // 收藏/取消收藏
+      const starBtn = item.querySelector('.btn-star');
+      if (starBtn) {
+        starBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const contactId = parseInt(item.dataset.contactId);
+          const isStarred = item.dataset.starred === 'true';
+          fetch('/api/contacts/' + contactId + '/star', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isStarred: !isStarred })
+          }).then(() => {
+            this.loadContacts();
+            UI.showToast(isStarred ? '已取消收藏' : '已收藏 ❤️');
+          }).catch(() => UI.showToast('操作失败'));
+        });
+      }
+      
+      // 删除联系人
+      const deleteBtn = item.querySelector('.btn-delete');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const contactId = parseInt(item.dataset.contactId);
+          const contactName = item.querySelector('.contact-item-name')?.textContent || '该联系人';
+          UI.showConfirm('删除联系人', '确定要删除与"' + contactName + '"的好友关系吗？', async () => {
+            try {
+              const response = await fetch('/api/contacts/' + contactId, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: Auth.getCurrentUserId() })
+              });
+              const data = await response.json();
+              if (data.success) { UI.showToast('联系人已删除'); this.loadContacts(); }
+              else { UI.showToast(data.error || '删除失败'); }
+            } catch (e) { UI.showToast('删除失败'); }
+          });
+        });
+      }
     });
   },
   
@@ -761,8 +839,8 @@ const MenuFunctions = {
    */
   showWallet() {
     UI.showPage('wallet');
-    if (Wallet && Wallet.loadBalance) {
-      Wallet.loadBalance();
+    if (Wallet && Wallet.updateUI) {
+      Wallet.updateUI();
     }
   },
   
@@ -779,12 +857,16 @@ const MenuFunctions = {
    */
   async loadStarredContacts() {
     const container = document.getElementById('starred-list');
+    let html = '';
+    
+    // 加载收藏的联系人
     try {
       const response = await fetch(`/api/contacts/starred?userId=${Auth.getCurrentUserId()}`);
       const data = await response.json();
       
       if (data.success && data.contacts.length > 0) {
-        container.innerHTML = data.contacts.map(c => `
+        html += '<div style="margin-bottom:16px"><h3 style="color:var(--text-muted);margin-bottom:8px">❤️ 收藏的联系人</h3>';
+        html += data.contacts.map(c => `
           <div class="contact-item" data-contact-id="${c.id}">
             <div class="avatar">${UI.avatarMap[c.avatar] || '👤'}</div>
             <div class="contact-item-info">
@@ -793,51 +875,103 @@ const MenuFunctions = {
             </div>
             <div class="contact-item-actions">
               <button class="btn btn-secondary btn-chat">聊天</button>
+              <button class="btn-delete" title="取消收藏" data-action="unstar-contact" data-id="${c.id}">✕</button>
             </div>
           </div>
         `).join('');
-        
-        // 绑定聊天按钮
-        container.querySelectorAll('.btn-chat').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            const item = e.target.closest('.contact-item');
-            const contactId = parseInt(item.dataset.contactId);
-            const contact = data.contacts.find(c => c.id === contactId);
-            if (contact) {
-              Chat.createPrivateChat(contactId, contact);
-            }
-          });
-        });
-      } else {
-        container.innerHTML = `
-          <div class="empty-state">
-            <p>暂无收藏的联系人</p>
-            <p>点击联系人旁边的❤️添加收藏</p>
-          </div>
-        `;
+        html += '</div>';
       }
     } catch (error) {
-      console.error('加载收藏失败:', error);
-      container.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
+      console.error('加载收藏联系人失败:', error);
     }
+    
+    // 加载收藏的消息
+    try {
+      const collections = JSON.parse(localStorage.getItem('nova_collections') || '[]');
+      if (collections.length > 0) {
+        html += '<div><h3 style="color:var(--text-muted);margin-bottom:8px">⭐ 收藏的消息</h3>';
+        html += collections.map((item, idx) => `
+          <div class="starred-msg-item" style="display:flex;justify-content:space-between;align-items:flex-start;padding:12px;background:var(--bg-tertiary);border-radius:8px;margin-bottom:8px">
+            <div style="flex:1;min-width:0">
+              <div style="color:var(--text-secondary);font-size:12px;margin-bottom:4px">来自: ${UI.escapeHtml(item.from)} · ${item.time}</div>
+              <div style="word-break:break-all">${UI.escapeHtml(item.content)}</div>
+            </div>
+            <button class="btn-delete" title="删除" data-action="del-collection" data-idx="${idx}" style="margin-left:8px;flex-shrink:0">✕</button>
+          </div>
+        `).join('');
+        html += '</div>';
+      }
+    } catch(e) {}
+    
+    if (html === '') {
+      html = '<div class="empty-state"><p>暂无收藏</p><p>长按消息可收藏，或点击联系人旁边的⭐添加收藏</p></div>';
+    }
+    
+    container.innerHTML = html;
+    
+    // 绑定事件
+    container.querySelectorAll('.btn-chat').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const item = e.target.closest('.contact-item');
+        const contactId = parseInt(item.dataset.contactId);
+        // 从联系人列表找
+        const contact = Contacts.allContacts?.find(c => c.id === contactId);
+        if (contact) Chat.createPrivateChat(contactId, contact);
+      });
+    });
+    
+    // 取消收藏联系人
+    container.querySelectorAll('[data-action="unstar-contact"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const contactId = parseInt(btn.dataset.id);
+        fetch('/api/contacts/' + contactId + '/star', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isStarred: false })
+        }).then(() => {
+          UI.showToast('已取消收藏');
+          this.loadStarredContacts();
+        });
+      });
+    });
+    
+    // 删除收藏的消息
+    container.querySelectorAll('[data-action="del-collection"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.idx);
+        let collections = JSON.parse(localStorage.getItem('nova_collections') || '[]');
+        if (idx >= 0 && idx < collections.length) {
+          collections.splice(idx, 1);
+          localStorage.setItem('nova_collections', JSON.stringify(collections));
+          UI.showToast('已删除收藏');
+          this.loadStarredContacts();
+        }
+      });
+    });
   },
   
   /**
    * 清除缓存
    */
   clearCache() {
-    UI.showConfirm('清除缓存', '确定要清除本地缓存数据吗？这不会影响服务器数据。', () => {
-      // 清除localStorage中的缓存
+    UI.showConfirm('清除缓存', '确定要清除本地缓存数据吗？包括聊天缓存、收藏和设置偏好。', () => {
+      const keepKeys = ['nova_user', 'nova_token'];
       const keysToRemove = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && (key.includes('cache') || key.includes('temp') || key.includes('history'))) {
+        if (key && (key.startsWith('nova_') || key.startsWith('security_')) && !keepKeys.includes(key)) {
           keysToRemove.push(key);
         }
       }
-      keysToRemove.forEach(key => localStorage.removeItem(key));
-      
-      UI.showToast(`已清除 ${keysToRemove.length} 项缓存数据`);
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+      if (typeof Chat !== 'undefined') {
+        Chat.chatMessages = {};
+        Chat.unreadCounts = {};
+        Chat.pinnedChats = [];
+      }
+      UI.showToast(`已清除 ${keysToRemove.length} 项缓存 🗑️`);
     });
   },
   
@@ -846,11 +980,59 @@ const MenuFunctions = {
    */
   showAbout() {
     document.getElementById('about-modal').classList.remove('hidden');
+  },
+  
+  showChangePassword() {
+    UI.showModal('修改密码', `
+      <div class="form-group">
+        <label>旧密码</label>
+        <input type="password" id="old-password" placeholder="输入当前密码">
+      </div>
+      <div class="form-group">
+        <label>新密码</label>
+        <input type="password" id="new-password" placeholder="至少6位" minlength="6">
+      </div>
+      <div class="form-group">
+        <label>确认新密码</label>
+        <input type="password" id="confirm-new-password" placeholder="再输一次">
+      </div>
+    `, [
+      { text: '取消', class: 'btn-secondary' },
+      { text: '修改', class: 'btn-primary', onClick: () => MenuFunctions.submitChangePassword() }
+    ]);
+  },
+  
+  async submitChangePassword() {
+    const oldPwd = document.getElementById('old-password')?.value;
+    const newPwd = document.getElementById('new-password')?.value;
+    const confirmPwd = document.getElementById('confirm-new-password')?.value;
+    if (!oldPwd || !newPwd || !confirmPwd) { UI.showToast('请填写所有字段'); return; }
+    if (newPwd.length < 6) { UI.showToast('新密码至少6位'); return; }
+    if (newPwd !== confirmPwd) { UI.showToast('两次密码不一致'); return; }
+    try {
+      const response = await fetch('/api/user/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: Auth.getCurrentUserId(), oldPassword: oldPwd, newPassword: newPwd })
+      });
+      const data = await response.json();
+      if (data.success) { UI.showToast('密码修改成功 ✅'); UI.closeModal(); }
+      else { UI.showToast(data.error || '密码修改失败'); }
+    } catch (e) { UI.showToast('修改失败，请重试'); }
   }
 };
 
 // 绑定菜单事件
 document.addEventListener('DOMContentLoaded', () => {
+  // 修改密码
+  const changePwdBtn = document.getElementById('menu-change-password');
+  if (changePwdBtn) {
+    changePwdBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      MenuFunctions.showChangePassword();
+    });
+  }
+  
   // 星币钱包
   const menuWallet = document.getElementById('menu-wallet');
   if (menuWallet) {
@@ -1662,3 +1844,120 @@ window.GroupSettings = GroupSettings;
 window.SuperGroup = SuperGroup;
 window.AICompany = AICompany;
 window.Collection = Collection;
+
+// ==================== 全局状态管理 & 浏览器返回键处理 ====================
+const AppState = {
+  inChat: false,
+  inChatInfo: false,
+  inSecurity: false,
+  inStarred: false,
+  inGroupSettings: false,
+  inAIChat: false,
+  lastBackTime: 0,
+  
+  init() {
+    window.addEventListener('popstate', (e) => this.handlePopState(e));
+    history.replaceState({ page: 'main' }, '');
+  },
+  
+  handlePopState(e) {
+    // 如果在聊天信息页，关闭信息页
+    if (this.inChatInfo) {
+      this.inChatInfo = false;
+      const panel = document.getElementById('chat-info-panel');
+      if (panel) panel.classList.add('hidden');
+      return;
+    }
+    
+    // 如果在聊天中，关闭聊天
+    if (this.inChat) {
+      if (typeof Chat !== 'undefined' && Chat.closeChat) {
+        Chat.closeChat();
+      }
+      return;
+    }
+    
+    // 如果在AI聊天中，关闭AI聊天
+    if (this.inAIChat) {
+      this.inAIChat = false;
+      if (typeof AIChat !== 'undefined' && AIChat.closeChat) {
+        AIChat.closeChat();
+      }
+      return;
+    }
+    
+    // 如果在群组设置页，返回聊天列表
+    if (this.inGroupSettings) {
+      this.inGroupSettings = false;
+      UI.showPage('chats');
+      return;
+    }
+    
+    // 如果在收藏页，返回个人资料
+    if (this.inStarred) {
+      this.inStarred = false;
+      UI.showPage('profile');
+      return;
+    }
+    
+    // 如果在安全设置页，返回个人资料
+    if (this.inSecurity) {
+      this.inSecurity = false;
+      UI.showPage('profile');
+      return;
+    }
+    
+    // 如果弹窗开着，关闭弹窗
+    const modals = ['modal', 'about-modal', 'super-group-modal', 'ai-company-modal', 'ai-meeting-modal', 'add-contact-modal'];
+    for (const id of modals) {
+      const m = document.getElementById(id);
+      if (m && !m.classList.contains('hidden')) {
+        m.classList.add('hidden');
+        return;
+      }
+    }
+    
+    // 默认：双击退出提示
+    const now = Date.now();
+    if (now - this.lastBackTime < 2000) {
+      // 双击退出 - 实际不做任何事，保持在app内
+    } else {
+      UI.showToast('再按一次退出', 2000);
+    }
+    this.lastBackTime = now;
+    history.pushState({ page: 'main' }, '');
+  },
+  
+  enterChat() {
+    this.inChat = true;
+    this.inChatInfo = false;
+    history.pushState({ page: 'chat' }, '');
+  },
+  
+  enterSecurity() {
+    this.inSecurity = true;
+    history.pushState({ page: 'security' }, '');
+  },
+  
+  enterStarred() {
+    this.inStarred = true;
+    history.pushState({ page: 'starred' }, '');
+  },
+  
+  enterGroupSettings() {
+    this.inGroupSettings = true;
+    history.pushState({ page: 'group-settings' }, '');
+  },
+  
+  enterAIChat() {
+    this.inAIChat = true;
+    history.pushState({ page: 'ai-chat' }, '');
+  }
+};
+
+// 页面加载时初始化
+document.addEventListener('DOMContentLoaded', () => {
+  AppState.init();
+});
+
+window.AppState = AppState;

@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-title" content="Nova-OS">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="application-name" content="Nova-OS">
-  <link rel="stylesheet" href="/css/style.css?v=202606191100">
+  <link rel="stylesheet" href="/css/style.css?v=202606191430">
 </head>
 <body>
   <!-- 星空背景 -->
@@ -284,6 +284,9 @@
                 <div class="menu-item" id="menu-security">
                   <span class="menu-icon">🔒</span><span class="menu-text">安全设置</span><span class="menu-arrow">›</span>
                 </div>
+                <div class="menu-item" id="menu-change-password">
+                  <span class="menu-icon">🔑</span><span class="menu-text">修改密码</span><span class="menu-arrow">›</span>
+                </div>
               </div>
               <div class="menu-group">
                 <div class="menu-item" id="menu-wallet">
@@ -298,14 +301,12 @@
                   <span class="menu-icon">🗑️</span><span class="menu-text">清除缓存</span><span class="menu-arrow">›</span>
                 </div>
                 <div class="menu-item" id="menu-about">
-                  <span class="menu-icon">📱</span><span class="menu-text">关于Nova-OS</span><span class="menu-value">v3.0</span><span class="menu-arrow">›</span>
+                  <span class="menu-icon">📱</span><span class="menu-text">关于Nova-OS</span><span class="menu-value">v3.2</span><span class="menu-arrow">›</span>
                 </div>
               </div>
               <div class="menu-group">
                 
-          <div class="menu-item" id="btn-edit-profile">
-            <span class="menu-icon">✏️</span><span class="menu-text">编辑昵称</span><span class="menu-arrow">›</span>
-          </div>
+
 <div class="menu-item danger" id="btn-logout">
                   <span class="menu-icon">🚪</span><span class="menu-text">退出登录</span>
                 </div>
@@ -480,18 +481,7 @@
     </div>
 
     
-    <!-- 我的收藏页面 -->
-    <div class="page hidden" id="page-starred">
-      <div class="page-header">
-        <button class="btn-icon btn-back" id="btn-starred-back">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-        </button>
-        <h2>我的收藏</h2>
-      </div>
-      <div class="starred-list" id="starred-list">
-        <div class="empty-state"><p>暂无收藏的联系人</p><p>点击联系人旁边的爱心添加收藏</p></div>
-      </div>
-    </div>
+
 
     <!-- 群组设置页面 -->
     <div class="page hidden" id="page-group-settings">
@@ -732,7 +722,7 @@
             </svg>
           </div>
           <h2>Nova-OS</h2>
-          <p class="version">星尘聊天系统 v3.0</p>
+          <p class="version">星尘聊天系统 v3.2</p>
           <div class="about-desc">
             <p>一款基于Web的加密即时通讯应用，采用端到端加密技术保护您的隐私。</p>
           </div>
@@ -960,13 +950,13 @@
 
   <!-- 脚本加载 -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/crypto.js?v=202606191100"></script>
-  <script src="/js/ui.js?v=202606191100"></script>
-  <script src="/js/auth.js?v=202606191100"></script>
-  <script src="/js/chat.js?v=202606191100"></script>
-  <script src="/js/ai.js?v=202606191100"></script>
-  <script src="/js/wallet.js?v=202606191100"></script>
-  <script src="/js/pwa.js?v=202606191100"></script>
-  <script src="/js/app.js?v=202606191100"></script>
+  <script src="/js/crypto.js?v=202606191430"></script>
+  <script src="/js/ui.js?v=202606191430"></script>
+  <script src="/js/auth.js?v=202606191430"></script>
+  <script src="/js/chat.js?v=202606191430"></script>
+  <script src="/js/ai.js?v=202606191430"></script>
+  <script src="/js/wallet.js?v=202606191430"></script>
+  <script src="/js/pwa.js?v=202606191430"></script>
+  <script src="/js/app.js?v=202606191430"></script>
 </body>
 </html>

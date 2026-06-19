@@ -232,12 +232,13 @@ const Auth = {
       const data = await response.json();
       
       if (data.success) {
+        const savedEmail = this.tempData?.email || '';
         UI.closeModal();
         UI.showToast('密码重置成功！请使用新密码登录');
         this.tempData = null;
         
         // 清空登录表单并显示
-        document.getElementById('login-account').value = this.tempData?.email || '';
+        document.getElementById('login-account').value = savedEmail;
         document.getElementById('login-password').value = '';
       } else {
         hint.style.color = '#ff4444';

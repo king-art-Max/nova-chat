@@ -42,11 +42,6 @@ const UI = {
       Contacts.loadContacts();
     }
     
-    // 切换到消息页时刷新聊天列表
-    if (pageId === 'chats' && typeof Chat !== 'undefined') {
-      Chat.loadChatList();
-    }
-    
     // 更新导航状态
     document.querySelectorAll('.nav-item').forEach(item => {
       item.classList.remove('active');

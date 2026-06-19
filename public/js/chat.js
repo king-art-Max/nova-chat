@@ -9,6 +9,8 @@ const Chat = {
   chatMessages: {}, // chatId -> messages[]
   userPublicKeys: {}, // userId -> publicKey
   typingTimers: {}, // chatId -> timer
+  unreadCounts: {}, // chatId -> count
+  messageStatus: {}, // messageId -> status
   
   /**
    * 初始化聊天模块
@@ -76,6 +78,12 @@ const Chat = {
     document.getElementById('btn-chat-back').addEventListener('click', () => {
       this.closeChat();
     });
+    
+    // 聊天信息按钮
+    const chatInfoBtn = document.getElementById('btn-chat-info');
+    if (chatInfoBtn) {
+      chatInfoBtn.addEventListener('click', () => this.showChatInfoPanel());
+    }
     
     // 发送消息按钮
     document.getElementById('btn-send-message').addEventListener('click', () => {
@@ -169,6 +177,16 @@ const Chat = {
         this.closeAllPanels();
       });
     }
+    
+    // 点击输入框区域关闭面板
+    const messageInput = document.getElementById('message-input');
+    if (messageInput) {
+      messageInput.addEventListener('focus', () => {
+        this.closeAllPanels();
+      });
+    }
+    
+    // 输入工具栏按钮点击后自动关闭其他面板（已在各toggle中处理）
   },
   
   /**
@@ -358,22 +376,62 @@ const Chat = {
   },
   
   /**
-   * 置顶/取消置顶聊天
+   * 置顶/取消置顶聊天（显示选项菜单）
    */
   togglePinChat(item) {
     const chatId = parseInt(item.dataset.chatId);
-    const index = this.pinnedChats.indexOf(chatId);
+    const isPinned = this.pinnedChats.includes(chatId);
     
-    if (index > -1) {
-      this.pinnedChats.splice(index, 1);
-      UI.showToast('已取消置顶');
-    } else {
-      this.pinnedChats.unshift(chatId);
-      UI.showToast('已置顶聊天 📌');
-    }
+    // 获取聊天名称
+    const chatName = item.querySelector('.chat-item-name')?.textContent || '此聊天';
     
-    localStorage.setItem('nova_pinned_chats', JSON.stringify(this.pinnedChats));
-    this.loadChatList();
+    UI.showModal('聊天操作', `
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn ${isPinned ? 'btn-secondary' : 'btn-primary'}" style="width:100%" id="opt-pin-chat">
+          ${isPinned ? '📌 取消置顶' : '📌 置顶聊天'}
+        </button>
+        <button class="btn btn-danger" style="width:100%" id="opt-delete-chat">
+          🗑️ 删除聊天
+        </button>
+      </div>
+    `, [{ text: '取消', class: 'btn-secondary' }]);
+    
+    document.getElementById('opt-pin-chat').addEventListener('click', () => {
+      UI.closeModal();
+      const index = this.pinnedChats.indexOf(chatId);
+      if (index > -1) {
+        this.pinnedChats.splice(index, 1);
+        UI.showToast('已取消置顶');
+      } else {
+        this.pinnedChats.unshift(chatId);
+        UI.showToast('已置顶聊天 📌');
+      }
+      localStorage.setItem('nova_pinned_chats', JSON.stringify(this.pinnedChats));
+      this.loadChatList();
+    });
+    
+    document.getElementById('opt-delete-chat').addEventListener('click', () => {
+      UI.closeModal();
+      this.confirmDeleteChat(chatId, chatName);
+    });
+  },
+  
+  /**
+   * 确认删除聊天
+   */
+  confirmDeleteChat(chatId, chatName) {
+    UI.showConfirm('删除聊天', `确定要删除与 "${chatName}" 的聊天记录吗？此操作不可恢复。`, async () => {
+      try {
+        await fetch(`/api/chats/${chatId}`, { method: 'DELETE' });
+      } catch (e) {}
+      // 从置顶列表移除
+      const idx = this.pinnedChats.indexOf(chatId);
+      if (idx > -1) this.pinnedChats.splice(idx, 1);
+      localStorage.setItem('nova_pinned_chats', JSON.stringify(this.pinnedChats));
+      // 刷新列表
+      this.loadChatList();
+      UI.showToast('聊天已删除 🗑️');
+    });
   },
   
   /**
@@ -619,6 +677,9 @@ const Chat = {
     
     // 显示聊天窗口
     UI.showChatWindow();
+    
+    // 更新全局状态
+    if (window.AppState) AppState.enterChat();
     
     // 聚焦输入框
     document.getElementById('message-input').focus();
@@ -871,7 +932,7 @@ const Chat = {
     if (isRecalled) {
       messageHTML += `<div class="message-content recalled">${UI.escapeHtml(content)}</div>`;
     } else if (isImage) {
-      messageHTML += `<div class="message-content"><img src="${content}" class="chat-image" onclick="Chat.previewImage('${content}')"></div>`;
+      messageHTML += `<div class="message-content"><img src="${content}" class="chat-image" onclick="UI.previewImage('${content}')"></div>`;
     } else {
       const safeContent = typeof UI !== 'undefined' && UI.escapeHtml ? UI.escapeHtml(content) : content.replace(/</g,'&lt;').replace(/>/g,'&gt;');
       messageHTML += `<div class="message-content">${safeContent}</div>`;
@@ -1329,11 +1390,16 @@ const Chat = {
       this.recordingSeconds = 0;
       const voiceBtn = document.getElementById('btn-voice');
       if (voiceBtn) voiceBtn.classList.add('recording');
+      // 显示录音计时器
+      const timerEl = document.getElementById('voice-timer');
+      const durationEl = document.getElementById('voice-duration');
+      if (timerEl) { timerEl.classList.remove('hidden'); }
+      if (durationEl) durationEl.textContent = '0:00';
       this.recordingTimer = setInterval(() => {
         this.recordingSeconds++;
         if (this.recordingSeconds >= 60) { this.stopRecording(); UI.showToast('录音已达60秒上限'); }
-        const timerEl = document.getElementById('voice-timer');
-        if (timerEl) timerEl.textContent = this.formatTime(this.recordingSeconds);
+        const dEl = document.getElementById('voice-duration');
+        if (dEl) dEl.textContent = this.formatTime(this.recordingSeconds);
       }, 1000);
     } catch (error) { console.error('录音启动失败:', error); UI.showToast('无法访问麦克风'); }
   },
@@ -1345,7 +1411,7 @@ const Chat = {
       const voiceBtn = document.getElementById('btn-voice');
       if (voiceBtn) voiceBtn.classList.remove('recording');
       const timerEl = document.getElementById('voice-timer');
-      if (timerEl) timerEl.textContent = '0s';
+      if (timerEl) { timerEl.classList.add('hidden'); }
     }
   },
   formatTime(seconds) { const m = Math.floor(seconds / 60); const s = seconds % 60; return m + ':' + (s < 10 ? '0' : '') + s; },
@@ -1788,15 +1854,32 @@ const Chat = {
   
     closeChat() {
     if (this.isRecording) this.stopRecording();
+    this.closeAllPanels();
+    this.cancelQuote();
+    this.disableBurnMode();
+    this.anonymousMode = false;
+    const anonBtn = document.getElementById('btn-anonymous');
+    if (anonBtn) anonBtn.classList.remove('active');
     if (this.currentChat) {
       this.sendStopTyping();
+      if (!this.unreadCounts) this.unreadCounts = {};
       this.unreadCounts[this.currentChat.id] = 0;
       this.updateChatListBadge(this.currentChat.id);
+      // 离开Socket房间
+      if (window.socket && window.socket.connected) {
+        socket.emit('leave-chat', this.currentChat.id);
+      }
       this.currentChat = null;
     }
     UI.hideChatWindow();
+    // 更新全局状态
+    if (window.AppState) {
+      AppState.inChat = false;
+      AppState.inChatInfo = false;
+    }
     // 返回聊天列表时刷新，确保显示最新消息
     this.loadChatList();
+    UI.showPage('chats');
   },
   
   /**
@@ -2380,6 +2463,85 @@ Object.assign(Chat, {
     }
   },
   
+  /**
+   * 显示聊天信息面板
+   */
+  showChatInfoPanel() {
+    if (!this.currentChat) return;
+    
+    // 检查是否已有信息面板
+    let panel = document.getElementById('chat-info-panel');
+    if (panel) {
+      panel.classList.toggle('hidden');
+      return;
+    }
+    
+    // 创建信息面板
+    panel = document.createElement('div');
+    panel.id = 'chat-info-panel';
+    panel.className = 'chat-info-panel';
+    
+    const chat = this.currentChat;
+    let html = '<div class="panel-header"><h3>聊天信息</h3><button class="btn-icon" id="btn-close-chat-info">✕</button></div>';
+    
+    if (chat.type === 'group') {
+      html += '<div class="panel-section"><div class="panel-label">群组名称</div><div class="panel-value">' + (chat.name || '未命名') + '</div></div>';
+      html += '<div class="panel-section"><div class="panel-label">成员 (' + (chat.members?.length || 0) + ')</div>';
+      if (chat.members) {
+        html += '<div class="member-list">';
+        chat.members.forEach(m => {
+          html += '<div class="member-item"><span class="avatar">' + (UI.avatarMap[m.avatar] || '👤') + '</span><span class="name">' + UI.escapeHtml(m.nickname) + '</span></div>';
+        });
+        html += '</div>';
+      }
+      html += '</div>';
+      // 群组设置入口
+      html += '<div class="panel-section"><button class="btn btn-secondary" style="width:100%" id="btn-open-group-settings">⚙️ 群组设置</button></div>';
+    } else {
+      const otherMember = chat.members?.find(m => m.id !== Auth.getCurrentUserId());
+      if (otherMember) {
+        html += '<div class="panel-section"><div class="panel-label">昵称</div><div class="panel-value">' + UI.escapeHtml(otherMember.nickname) + '</div></div>';
+        html += '<div class="panel-section"><div class="panel-label">Gal号</div><div class="panel-value">' + UI.formatGalNumber(otherMember.galNumber) + '</div></div>';
+      }
+    }
+    
+    // 清空聊天记录按钮
+    html += '<div class="panel-section" style="margin-top:16px"><button class="btn btn-danger" style="width:100%" id="btn-clear-chat-history">🗑️ 清空聊天记录</button></div>';
+    
+    panel.innerHTML = html;
+    
+    // 插入到聊天窗口
+    const chatWindow = document.getElementById('chat-window');
+    chatWindow.appendChild(panel);
+    
+    // 绑定事件
+    document.getElementById('btn-close-chat-info')?.addEventListener('click', () => {
+      panel.classList.add('hidden');
+    });
+    
+    document.getElementById('btn-clear-chat-history')?.addEventListener('click', () => {
+      UI.showConfirm('清空聊天记录', '确定要清空所有聊天记录吗？此操作不可恢复。', async () => {
+        try {
+          await fetch('/api/chats/' + this.currentChat.id + '/messages', { method: 'DELETE' });
+          document.getElementById('chat-messages').innerHTML = '';
+          this.chatMessages[this.currentChat.id] = [];
+          UI.showToast('聊天记录已清空');
+          panel.classList.add('hidden');
+        } catch(e) { UI.showToast('清空失败'); }
+      });
+    });
+    
+    document.getElementById('btn-open-group-settings')?.addEventListener('click', () => {
+      panel.classList.add('hidden');
+      if (window.GroupSettings) {
+        GroupSettings.show(this.currentChat.id);
+      }
+    });
+    
+    // 更新AppState
+    if (window.AppState) AppState.inChatInfo = true;
+  },
+
   // 关闭所有面板
   closeAllPanels() {
     // 关闭所有工具栏面板
@@ -2657,6 +2819,14 @@ Object.assign(Chat, {
   showMessageMenu(messageEl, message, isSent) {
     // 关闭已存在的菜单
     this.closeMessageMenu();
+    // 初始化关闭菜单的事件处理器
+    if (!this.boundCloseMenu) {
+      this.boundCloseMenu = (e) => {
+        if (this.currentMessageMenu && !this.currentMessageMenu.contains(e.target)) {
+          this.closeMessageMenu();
+        }
+      };
+    }
     
     // 获取消息内容用于后续操作
     const content = this.getMessageContent(message);
@@ -2671,6 +2841,7 @@ Object.assign(Chat, {
       { icon: "💬", text: "引用回复", action: () => this.quoteReply(message, content) },
       { icon: "🔄", text: "转发", action: () => this.forwardMessage(message, content) },
       { icon: "🌐", text: "翻译", action: () => this.translateMessage(messageEl, message, content) },
+      { icon: "⭐", text: "收藏", action: () => this.favoriteMessage(message, content) },
     ];
     
     // 只有发送者且2分钟内才能撤回
@@ -2683,6 +2854,9 @@ Object.assign(Chat, {
         menuItems.push({ icon: "🗑️", text: "撤回", action: () => this.recallMessage(messageEl, message), danger: true });
       }
     }
+    
+    // 删除消息选项
+    menuItems.push({ icon: "🗑️", text: "删除", action: () => this.deleteMessage(messageEl, message), danger: true });
     
     // 创建菜单
     const menu = document.createElement("div");
@@ -2981,7 +3155,55 @@ Object.assign(Chat, {
   },
   
   /**
-   * 5. 撤回消息
+   * 5. 收藏消息
+   */
+  favoriteMessage(message, content) {
+    const senderName = message.nickname || (message.senderId === Auth.getCurrentUserId() ? '我' : '对方');
+    if (window.Collection) {
+      Collection.add(content, senderName);
+    } else {
+      // 直接用localStorage
+      let collections = JSON.parse(localStorage.getItem('nova_collections') || '[]');
+      collections.unshift({
+        content,
+        from: senderName,
+        time: new Date().toLocaleString('zh-CN')
+      });
+      if (collections.length > 100) collections = collections.slice(0, 100);
+      localStorage.setItem('nova_collections', JSON.stringify(collections));
+      UI.showToast('已添加到收藏 ⭐');
+    }
+  },
+  
+  /**
+   * 6. 删除消息
+   */
+  async deleteMessage(messageEl, message) {
+    UI.showConfirm('删除消息', '确定要删除这条消息吗？', async () => {
+      try {
+        const msgId = message.id;
+        if (msgId && !msgId.startsWith('local-')) {
+          await fetch('/api/messages/' + msgId, { method: 'DELETE' });
+        }
+        // 从UI移除
+        if (messageEl && messageEl.parentNode) {
+          messageEl.remove();
+        }
+        // 从本地缓存移除
+        if (this.currentChat && this.chatMessages[this.currentChat.id]) {
+          const idx = this.chatMessages[this.currentChat.id].findIndex(m => m.id === msgId);
+          if (idx >= 0) this.chatMessages[this.currentChat.id].splice(idx, 1);
+        }
+        UI.showToast('消息已删除');
+      } catch (e) {
+        console.error('删除消息失败:', e);
+        UI.showToast('删除失败');
+      }
+    });
+  },
+  
+  /**
+   * 7. 撤回消息
    */
   async recallMessage(messageEl, message) {
     const messageTime = new Date(message.createdAt);

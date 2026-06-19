@@ -824,6 +824,31 @@ async function deleteMessage(messageId) {
   return result.changes > 0;
 }
 
+// 删除联系人
+async function deleteContact(userId, contactId) {
+  // 双向删除（user_id->contact_id 和 contact_id->user_id）
+  const result1 = await runSql(
+    'DELETE FROM contacts WHERE user_id = ? AND contact_id = ?',
+    [userId, contactId]
+  );
+  const result2 = await runSql(
+    'DELETE FROM contacts WHERE user_id = ? AND contact_id = ?',
+    [contactId, userId]
+  );
+  return result1.changes > 0 || result2.changes > 0;
+}
+
+// 删除聊天（及其消息）
+async function deleteChat(chatId) {
+  // 先删除聊天成员
+  await runSql('DELETE FROM chat_members WHERE chat_id = ?', [chatId]);
+  // 再删除消息
+  await runSql('DELETE FROM messages WHERE chat_id = ?', [chatId]);
+  // 最后删除聊天
+  const result = await runSql('DELETE FROM chats WHERE id = ?', [chatId]);
+  return result.changes > 0;
+}
+
 async function recallMessage(messageId) {
   const result = await runSql(
     `UPDATE messages SET encrypted_content = ?, is_recalled = ? WHERE id = ?`,
@@ -984,6 +1009,8 @@ module.exports = {
   saveMessage,
   getMessages,
   deleteMessage,
+  deleteContact,
+  deleteChat,
   recallMessage,
   getMessageById,
   markMessageRead,

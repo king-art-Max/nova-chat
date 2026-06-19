@@ -478,6 +478,52 @@ async function startServer() {
     }
   });
 
+  // 删除聊天
+  app.delete('/api/chats/:id', async (req, res) => {
+    const chatId = parseInt(req.params.id);
+    if (!chatId) {
+      return res.status(400).json({ success: false, error: '缺少聊天ID' });
+    }
+    try {
+      const success = await db.deleteChat(chatId);
+      res.json({ success });
+    } catch (error) {
+      console.error('删除聊天错误:', error);
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+
+  // 删除消息
+  app.delete('/api/messages/:id', async (req, res) => {
+    const messageId = parseInt(req.params.id);
+    if (!messageId) {
+      return res.status(400).json({ success: false, error: '缺少消息ID' });
+    }
+    try {
+      const success = await db.deleteMessage(messageId);
+      res.json({ success });
+    } catch (error) {
+      console.error('删除消息错误:', error);
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+
+  // 删除联系人
+  app.delete('/api/contacts/:id', async (req, res) => {
+    const contactId = parseInt(req.params.id);
+    const { userId } = req.body;
+    if (!contactId || !userId) {
+      return res.status(400).json({ success: false, error: '缺少参数' });
+    }
+    try {
+      const success = await db.deleteContact(userId, contactId);
+      res.json({ success });
+    } catch (error) {
+      console.error('删除联系人错误:', error);
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+
   // 消息撤回
   app.put('/api/chats/:id/messages/:messageId/recall', async (req, res) => {
     const messageId = parseInt(req.params.messageId);
