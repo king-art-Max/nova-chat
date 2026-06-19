@@ -363,6 +363,7 @@ const AIChat = {
   closeChat() {
     this.currentPersona = null;
     UI.hideAIChatWindow();
+    if (window.AppState) AppState.inAIChat = false;
   },
   
   /**

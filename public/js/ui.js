@@ -35,7 +35,8 @@ const UI = {
     document.querySelectorAll('.page').forEach(page => {
       page.classList.add('hidden');
     });
-    document.getElementById(`page-${pageId}`).classList.remove('hidden');
+    const pageEl = document.getElementById(`page-${pageId}`);
+    if (pageEl) pageEl.classList.remove('hidden');
     
     // 切换到联系人页时刷新列表
     if (pageId === 'contacts' && typeof Contacts !== 'undefined') {
@@ -428,16 +429,7 @@ const UI = {
 // 全局保存在线用户状态
 let onlineUsers = new Set();
 
-// 监听用户状态变化
-if (typeof socket !== 'undefined') {
-  socket.on('user-status', (data) => {
-    if (data.status === 'online') {
-      onlineUsers.add(data.userId);
-    } else {
-      onlineUsers.delete(data.userId);
-    }
-  });
-}
+// 在线用户状态由 registerSocketEvents 统一管理（chat.js）
 
 // 导出UI模块
 window.UI = UI;

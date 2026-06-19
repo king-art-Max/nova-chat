@@ -11,6 +11,25 @@ const Chat = {
   typingTimers: {}, // chatId -> timer
   unreadCounts: {}, // chatId -> count
   messageStatus: {}, // messageId -> status
+  translations: {}, // messageId -> translatedText
+  burnSeconds: 30,
+  burnMode: false,
+  anonymousMode: false,
+  selectedTargetLang: 'zh',
+  selectedTranslateLang: 'en',
+  quotedMessage: null,
+  isRecording: false,
+  audioChunks: [],
+  recordingSeconds: 0,
+  mediaRecorder: null,
+  recordingTimer: null,
+  recordingStartTime: null,
+  currentMessageMenu: null,
+  currentMessage: null,
+  currentMessageEl: null,
+  boundCloseMenu: null,
+  pinnedChats: [],
+  chatListData: [],
   
   /**
    * 初始化聊天模块
@@ -20,6 +39,16 @@ const Chat = {
     this.messageStatus = this.messageStatus || {};
     this.bindEvents();
     this.loadChatList();
+    // 图片预览代理事件（避免XSS）
+    const chatMessages = document.getElementById('chat-messages');
+    if (chatMessages) {
+      chatMessages.addEventListener('click', (e) => {
+        if (e.target.tagName === 'IMG' && e.target.dataset.preview) {
+          e.stopPropagation();
+          UI.previewImage(e.target.src);
+        }
+      });
+    }
     // 启动消息轮询兜底
     this.startMessagePolling();
     // 请求浏览器通知权限
@@ -932,7 +961,7 @@ const Chat = {
     if (isRecalled) {
       messageHTML += `<div class="message-content recalled">${UI.escapeHtml(content)}</div>`;
     } else if (isImage) {
-      messageHTML += `<div class="message-content"><img src="${content}" class="chat-image" onclick="UI.previewImage('${content}')"></div>`;
+      messageHTML += `<div class="message-content"><img src="${content}" class="chat-image" data-preview="true"></div>`;
     } else {
       const safeContent = typeof UI !== 'undefined' && UI.escapeHtml ? UI.escapeHtml(content) : content.replace(/</g,'&lt;').replace(/>/g,'&gt;');
       messageHTML += `<div class="message-content">${safeContent}</div>`;
@@ -1288,14 +1317,7 @@ const Chat = {
     const hint = document.getElementById('anonymous-hint');
     if (hint) hint.classList.remove('visible');
   },
-  closeAllPanels() {
-    const panels = ['emoji-panel', 'translate-panel', 'burn-panel', 'redpacket-panel', 'anonymous-panel'];
-    panels.forEach(id => {
-      const panel = document.getElementById(id);
-      if (panel) panel.classList.add('hidden');
-    });
-    document.querySelectorAll('.input-panel').forEach(p => { p.classList.remove('visible'); p.classList.add('hidden'); });
-  },
+  // closeAllPanels 定义在 V3.0 扩展部分（Object.assign）,
   selectTargetLang(lang) {
     this.selectedTargetLang = lang;
     document.querySelectorAll('#translate-panel .lang-btn').forEach(btn => btn.classList.toggle('selected', btn.dataset.lang === lang));
@@ -1495,7 +1517,7 @@ const Chat = {
         body: JSON.stringify({chatId: this.currentChat.id, senderId: Auth.getCurrentUserId(), amount, count, type, message})
       });
       const data = await response.json();
-      if (data.success) { this.closeAllPanels(); UI.showToast('红包已发送'); Wallet && Wallet.loadBalance && Wallet.loadBalance(); }
+      if (data.success) { this.closeAllPanels(); UI.showToast('红包已发送'); Wallet && Wallet.updateUI && Wallet.updateUI(); }
       else UI.showToast(data.error || '发送红包失败');
     } catch (error) { console.error('发送红包失败:', error); UI.showToast('发送红包失败'); }
   },
@@ -1507,7 +1529,7 @@ const Chat = {
         body: JSON.stringify({userId: Auth.getCurrentUserId()})
       });
       const data = await response.json();
-      if (data.success) { this.showRedPacketResult(data); Wallet && Wallet.loadBalance && Wallet.loadBalance(); }
+      if (data.success) { this.showRedPacketResult(data); Wallet && Wallet.updateUI && Wallet.updateUI(); }
       else UI.showToast(data.error || '领取红包失败');
     } catch (error) { console.error('领取红包失败:', error); UI.showToast('领取红包失败'); }
   },
@@ -1871,6 +1893,9 @@ const Chat = {
       }
       this.currentChat = null;
     }
+    // 清理聊天信息面板
+    const infoPanel = document.getElementById('chat-info-panel');
+    if (infoPanel) infoPanel.remove();
     UI.hideChatWindow();
     // 更新全局状态
     if (window.AppState) {
@@ -1984,6 +2009,22 @@ const Chat = {
 
 // Socket.io 事件处理 - 延迟注册（等socket连接后）
 function registerSocketEvents() {
+  // Online user status tracking
+  if (window.socket) {
+    socket.on('user-status', (data) => {
+      if (data.status === 'online') {
+        window.onlineUsers.add(data.userId);
+      } else {
+        window.onlineUsers.delete(data.userId);
+      }
+    });
+    socket.on('user-online', (userId) => {
+      window.onlineUsers.add(userId);
+    });
+    socket.on('user-offline', (userId) => {
+      window.onlineUsers.delete(userId);
+    });
+  }
   const s = window.socket;
   if (!s) return;
   
@@ -2249,11 +2290,7 @@ Object.assign(Chat, {
     }
   },
   
-  // 语音录制相关
-  mediaRecorder: null,
-  audioChunks: [],
-  isRecording: false,
-  recordingStartTime: null,
+  // 语音录制相关 (属性已在对象初始化时定义)
   
   /**
    * 切换语音录制
@@ -2469,15 +2506,12 @@ Object.assign(Chat, {
   showChatInfoPanel() {
     if (!this.currentChat) return;
     
-    // 检查是否已有信息面板
-    let panel = document.getElementById('chat-info-panel');
-    if (panel) {
-      panel.classList.toggle('hidden');
-      return;
-    }
+    // 移除旧面板（确保切换聊天时内容更新）
+    const oldPanel = document.getElementById('chat-info-panel');
+    if (oldPanel) oldPanel.remove();
     
     // 创建信息面板
-    panel = document.createElement('div');
+    let panel = document.createElement('div');
     panel.id = 'chat-info-panel';
     panel.className = 'chat-info-panel';
     

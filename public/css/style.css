@@ -4868,3 +4868,265 @@ ul, ol {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+
+/* ==================== V3.2 补充样式 ==================== */
+
+/* 聊天信息面板 */
+.chat-info-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 85%;
+  max-width: 360px;
+  background: var(--bg-secondary);
+  z-index: 100;
+  overflow-y: auto;
+  padding: 16px;
+  animation: slideInRight 0.25s ease;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+}
+.chat-info-panel.hidden { display: none; }
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.chat-info-panel .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+.chat-info-panel .panel-header h3 { font-size: 16px; }
+.chat-info-panel .panel-section {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+.chat-info-panel .panel-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.chat-info-panel .panel-value {
+  font-size: 14px;
+  word-break: break-all;
+}
+.chat-info-panel .panel-members {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.chat-info-panel .panel-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-primary);
+}
+.chat-info-panel .panel-member .avatar { font-size: 20px; }
+.chat-info-panel .panel-member .name { font-size: 14px; }
+
+/* 引用回复条 */
+.quote-bar {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-left: 3px solid var(--accent-blue);
+  margin: 0 8px;
+  border-radius: 0 6px 6px 0;
+}
+.quote-bar .quote-content {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+.quote-bar .quote-label {
+  color: var(--accent-blue);
+  font-size: 11px;
+  display: block;
+}
+.quote-bar .quote-text {
+  color: var(--text-secondary);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quote-bar .quote-cancel {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+
+/* 转发弹窗 */
+.forward-modal .forward-preview {
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-height: 80px;
+  overflow: hidden;
+}
+.forward-chat-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+.forward-chat-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.forward-chat-item:hover {
+  background: var(--bg-tertiary);
+}
+.forward-chat-item .forward-chat-avatar {
+  font-size: 20px;
+}
+.forward-chat-item .forward-chat-name {
+  font-size: 14px;
+}
+
+/* 消息翻译 */
+.message-translation {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: rgba(0, 212, 255, 0.08);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  display: none;
+}
+.message-translation.visible { display: block; }
+.message-translation .trans-label {
+  font-size: 11px;
+  color: var(--accent-blue);
+  margin-right: 4px;
+}
+.message-translation .trans-error {
+  color: var(--accent-pink);
+}
+
+/* 安全设置和群组设置页面覆盖层（在page-container外时） */
+#page-security, #page-group-settings {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  background: var(--bg-primary);
+  overflow-y: auto;
+  padding: 16px;
+  padding-bottom: 80px;
+}
+
+/* 收藏页面 */
+#page-starred .starred-header {
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 16px;
+}
+#page-starred .starred-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* AI会议消息样式 */
+.meeting-message {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  align-items: flex-start;
+}
+.meeting-avatar {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+.meeting-bubble {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  flex: 1;
+  min-width: 0;
+}
+.meeting-sender {
+  font-size: 12px;
+  color: var(--accent-blue);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.meeting-text {
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.meeting-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+.meeting-header .meeting-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+.meeting-header h3 {
+  font-size: 18px;
+}
+.meeting-subhint {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 8px;
+}
+.meeting-agenda-preview {
+  margin: 16px 0;
+}
+.agenda-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+.agenda-item .agenda-num {
+  width: 24px;
+  height: 24px;
+  background: var(--accent-blue);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* 已销毁消息 */
+.burned-message {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 13px;
+}
+.message-content.burned {
+  opacity: 0.5;
+}

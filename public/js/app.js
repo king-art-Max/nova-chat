@@ -164,6 +164,7 @@ const App = {
       securityBack.addEventListener('click', () => {
         UI.backToProfile();
         if (window.AppState) AppState.inSecurity = false;
+        history.back();
       });
     }
     
@@ -848,7 +849,9 @@ const MenuFunctions = {
    * 我的收藏 - 显示收藏联系人
    */
   async showStarred() {
+    UI.closeModal();
     UI.showPage('starred');
+    if (window.AppState) AppState.enterStarred();
     await this.loadStarredContacts();
   },
   
@@ -871,7 +874,7 @@ const MenuFunctions = {
             <div class="avatar">${UI.avatarMap[c.avatar] || '👤'}</div>
             <div class="contact-item-info">
               <div class="contact-item-name">${UI.escapeHtml(c.nickname)}</div>
-              <div class="contact-item-gal">${UI.formatGalNumber(c.gal_number)}</div>
+              <div class="contact-item-gal">${UI.formatGalNumber(c.galNumber || c.gal_number)}</div>
             </div>
             <div class="contact-item-actions">
               <button class="btn btn-secondary btn-chat">聊天</button>
@@ -1051,6 +1054,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
+  // 收藏页面返回按钮
+  const starredBack = document.getElementById('btn-starred-back');
+  if (starredBack) {
+    starredBack.addEventListener('click', () => {
+      UI.showPage('profile');
+      if (window.AppState) AppState.inStarred = false;
+      history.back();
+    });
+  }
+  
+  
   // 清除缓存
   const menuClearCache = document.getElementById('menu-clear-cache');
   if (menuClearCache) {
@@ -1069,13 +1083,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
-  // 收藏页面返回
-  const starredBack = document.getElementById('btn-starred-back');
-  if (starredBack) {
-    starredBack.addEventListener('click', () => {
-      UI.showPage('profile');
-    });
-  }
   
   // 关于弹窗关闭
   const aboutClose = document.getElementById('btn-close-about');
@@ -1385,6 +1392,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (groupBack) {
     groupBack.addEventListener('click', () => {
       UI.showPage('chats');
+      if (window.AppState) AppState.inGroupSettings = false;
+      history.back();
     });
   }
   
