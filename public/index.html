@@ -897,65 +897,8 @@
   </div>
 
 
-  <!-- 添加联系人弹窗 -->
-  <div id="add-contact-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>添加联系人</h3>
-        <button class="btn-icon" id="btn-close-add-contact">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <input type="text" id="add-contact-input" placeholder="输入Gal号码添加好友">
-          <p id="add-contact-hint" class="hint-text" style="color:var(--text-secondary);font-size:12px;margin-top:4px">输入对方的Gal号码，如 GAL90IA56MH2</p>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" id="btn-confirm-add-contact">添加</button>
-      </div>
-    </div>
-  </div>
 
-  <!-- 新建聊天选项弹窗 -->
-  <div id="new-chat-options" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>新建聊天</h3>
-        <button class="btn-icon" id="btn-close-new-chat-opt">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <button class="btn btn-secondary" id="opt-new-private" style="width:100%;margin-bottom:8px">💬 新建私聊</button>
-        <button class="btn btn-secondary" id="opt-new-group" style="width:100%">👥 新建群聊</button>
-      </div>
-    </div>
-  </div>
 
-  <!-- 群聊创建弹窗 -->
-  <div id="group-chat-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>创建群聊</h3>
-        <button class="btn-icon" id="btn-close-group-chat">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>群组名称</label>
-          <input type="text" id="group-name-input" placeholder="输入群组名称">
-        </div>
-        <p style="color:var(--text-secondary);font-size:13px;margin-top:8px">选择群成员：</p>
-        <div id="group-members-list"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary" id="btn-confirm-create-group">创建</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Toast通知 -->
   <div id="toast" class="toast hidden">

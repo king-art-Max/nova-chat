@@ -838,6 +838,12 @@ async function deleteContact(userId, contactId) {
   return result1.changes > 0 || result2.changes > 0;
 }
 
+// 清空聊天记录（只删消息，不删聊天）
+async function deleteChatMessages(chatId) {
+  const result = await runSql('DELETE FROM messages WHERE chat_id = ?', [chatId]);
+  return result.changes >= 0;
+}
+
 // 删除聊天（及其消息）
 async function deleteChat(chatId) {
   // 先删除聊天成员

@@ -960,7 +960,7 @@ const MenuFunctions = {
    */
   clearCache() {
     UI.showConfirm('清除缓存', '确定要清除本地缓存数据吗？包括聊天缓存、收藏和设置偏好。', () => {
-      const keepKeys = ['nova_user', 'nova_token'];
+      const keepKeys = ['nova_user', 'nova_token', 'nova_private_key'];
       const keysToRemove = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);

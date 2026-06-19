@@ -172,6 +172,7 @@ const Chat = {
       imgInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
           this.handleImageSelected(e.target.files[0]);
+          e.target.value = '';  // 允许重复选择同一图片
         }
       });
     }
@@ -996,14 +997,15 @@ const Chat = {
         <span class="voice-duration">${duration}秒</span>
       </div></div>`;
     } else if (message.type === 'file') {
-      // 文件消息渲染
+      // 文件消息渲染 — 使用data属性+事件委托，避免XSS
       let fileName = '文件', fileSize = '';
       try {
         const parsed = JSON.parse(raw);
         fileName = parsed.fileName || '文件';
         fileSize = Chat.formatFileSize ? Chat.formatFileSize(parsed.fileSize) : '';
       } catch(e) {}
-      messageHTML += `<div class="message-content file-message"><div class="file-message-content" onclick="UI.downloadFile && UI.downloadFile('${raw}', '${UI.escapeHtml(fileName)}')">
+      const fileId = 'file-' + (message.id || Date.now());
+      messageHTML += `<div class="message-content file-message"><div class="file-message-content" id="${fileId}" data-file-name="${UI.escapeHtml(fileName)}">
         <span class="file-icon">📎</span>
         <div class="file-info"><div class="file-name">${UI.escapeHtml(fileName)}</div><div class="file-size">${fileSize}</div></div>
       </div></div>`;
@@ -1080,6 +1082,20 @@ const Chat = {
         voiceEl.addEventListener('click', () => {
           const src = Chat._voiceAudioMap && Chat._voiceAudioMap[voiceEl.id];
           if (src) Chat.togglePlayVoice(voiceEl, src);
+        });
+      }
+    }
+    
+    // 文件消息点击事件（事件委托，避免XSS）
+    if (message.type === 'file') {
+      const fileEl = messageEl.querySelector('.file-message-content');
+      if (fileEl) {
+        if (!this._fileDataMap) this._fileDataMap = {};
+        this._fileDataMap[fileEl.id] = raw;
+        fileEl.addEventListener('click', () => {
+          const data = Chat._fileDataMap && Chat._fileDataMap[fileEl.id];
+          const name = fileEl.dataset.fileName || '文件';
+          if (data && UI.downloadFile) UI.downloadFile(data, name);
         });
       }
     }
@@ -1654,7 +1670,10 @@ const Chat = {
     UI.showModal('领取结果', '<div class="redpacket-result"><div class="rp-amount">' + data.amount + ' 星币</div><div class="rp-type">' + (data.type === 'random' ? '随机红包' : '普通红包') + '</div><div class="rp-message">' + (data.message || '') + '</div></div>', [{text: '确定', class: 'btn-primary'}]);
   },
   handleRedPacketClick(redPacketId, claimed, isOwner) {
-    if (!redPacketId) return;
+    if (!redPacketId || isNaN(parseInt(redPacketId))) {
+      UI.showToast('红包信息异常');
+      return;
+    }
     if (claimed || isOwner) this.viewRedPacketDetail(redPacketId);
     else this.claimRedPacket(redPacketId);
   },
@@ -2912,40 +2931,27 @@ Chat.sendMessage = async function() {
 // 覆盖原有的openChat，添加群模式初始化
 const originalOpenChat = Chat.openChat;
 Chat.openChat = async function(chatId, contactInfo = null) {
-  // 调用原始打开函数
+  // 调用原始打开函数（内部已调用loadChatInfo获取群组信息）
   await originalOpenChat.apply(this, arguments);
   
-  // 如果是群聊，获取并显示群公告
+  // 如果是群聊，初始化群模式和公告
   if (this.currentChat && this.currentChat.type === 'group') {
-    // 获取群组详情
-    try {
-      const response = await fetch(`/api/chats/${chatId}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        this.currentChat.groupMode = data.chat.groupMode;
-        this.currentChat.announcement = data.chat.announcement;
-        
-        // 更新群模式状态
-        this.updateGroupMode(data.chat.groupMode);
-        
-        // 如果有公告，显示在聊天顶部
-        if (data.chat.announcement) {
-          this.showAnnouncementBanner(data.chat.announcement);
-        }
-      }
-    } catch (error) {
-      console.error('获取群组详情失败:', error);
+    // loadChatInfo override已经设置了groupMode和announcement
+    if (this.currentChat.groupMode) {
+      this.updateGroupMode(this.currentChat.groupMode);
+    }
+    if (this.currentChat.announcement) {
+      this.showAnnouncementBanner(this.currentChat.announcement);
     }
   }
 };
 
-// 覆盖loadChatInfo，保留群组信息
+// 覆盖loadChatInfo，获取群组详情（原始版本从列表API获取，缺少groupMode/announcement）
 const originalLoadChatInfo = Chat.loadChatInfo;
 Chat.loadChatInfo = async function(chatId) {
   await originalLoadChatInfo.apply(this, arguments);
   
-  // 获取群组详情
+  // 获取群组详情（含groupMode和announcement）
   try {
     const response = await fetch(`/api/chats/${chatId}`);
     const data = await response.json();

@@ -478,6 +478,22 @@ async function startServer() {
     }
   });
 
+
+  // 清空聊天记录（删除该聊天下所有消息）
+  app.delete('/api/chats/:id/messages', async (req, res) => {
+    const chatId = parseInt(req.params.id);
+    if (!chatId) {
+      return res.status(400).json({ success: false, error: '缺少聊天ID' });
+    }
+    try {
+      const success = await db.deleteChatMessages(chatId);
+      res.json({ success });
+    } catch (error) {
+      console.error('清空聊天记录错误:', error);
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+
   // 删除聊天
   app.delete('/api/chats/:id', async (req, res) => {
     const chatId = parseInt(req.params.id);
