@@ -1403,6 +1403,39 @@ const GroupSettings = {
   getModeName(mode) {
     const names = { open: '开放群', meeting: '会议群', quiet: '防互扰群', ai_company: 'AI公司' };
     return names[mode] || mode;
+  },
+  
+  /**
+   * 保存群组设置
+   */
+  async save() {
+    if (!this.currentChatId) return;
+    const name = document.getElementById('group-name-edit')?.value?.trim();
+    const description = document.getElementById('group-desc-edit')?.value?.trim();
+    const announcement = document.getElementById('group-announcement')?.value?.trim();
+    
+    const updates = { userId: Auth.getCurrentUserId() };
+    if (name) updates.name = name;
+    if (description !== undefined) updates.description = description;
+    if (announcement !== undefined) updates.announcement = announcement;
+    
+    try {
+      const response = await fetch(`/api/chats/${this.currentChatId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      const data = await response.json();
+      if (data.success) {
+        UI.showToast('设置已保存');
+        this.show(this.currentChatId); // 刷新
+      } else {
+        UI.showToast(data.error || '保存失败');
+      }
+    } catch (error) {
+      console.error('保存设置失败:', error);
+      UI.showToast('保存失败');
+    }
   }
 };
 

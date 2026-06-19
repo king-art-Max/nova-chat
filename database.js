@@ -542,7 +542,7 @@ async function getUserByGal(galNumber) {
 
 async function getUserById(userId) {
   return await queryOne(
-    'SELECT id, gal_number, email, nickname, avatar, public_key FROM users WHERE id = ?',
+    'SELECT id, gal_number, email, nickname, avatar, public_key, balance FROM users WHERE id = ?',
     [userId]
   );
 }
@@ -574,7 +574,7 @@ async function updateUserPassword(userId, newPassword) {
   const passwordHash = bcrypt.hashSync(newPassword, 10);
   if (isProduction) {
     const result = await pgRunSql('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
-    return result.rowCount > 0;
+    return result.changes > 0;
   } else {
     const result = await runSql('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, userId]);
     return result.changes > 0;

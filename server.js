@@ -712,15 +712,15 @@ async function startServer() {
       if (!chatId || !senderId || !amount || amount <= 0 || !count || count <= 0) {
         return res.status(400).json({ error: '参数无效' });
       }
-      // 检查余额
-      const sender = await db.getUserByGalNumber(senderId);
+      // 检查余额 - senderId是数字userId，需要先获取用户信息
+      const sender = await db.getUserById(senderId);
       if (!sender || (sender.balance || 0) < amount) {
         return res.status(400).json({ error: '余额不足' });
       }
-      // 扣除余额
-      await db.updateBalance(senderId, -(amount));
-      // 创建红包
-      const redPacket = await db.createRedPacket(chatId, senderId, amount, count, type || 'random', message || '恭喜发财，大吉大利');
+      // 扣除余额 - 用gal_number
+      await db.updateBalance(sender.gal_number, -(amount));
+      // 创建红包 - sender_id存gal_number（FK约束）
+      const redPacket = await db.createRedPacket(chatId, sender.gal_number, amount, count, type || 'random', message || '恭喜发财，大吉大利');
       // 保存红包消息（完整JSON，与前端一致）
       const rpContent = JSON.stringify({ type: 'redpacket', amount, count, rpType: type || 'random', message: message || '恭喜发财', redPacketId: redPacket.id });
       const msgId = await db.saveMessage(chatId, senderId, rpContent, 'redpacket', 0, 0, false);
@@ -743,8 +743,10 @@ async function startServer() {
       const rpId = req.params.id;
       const redPacket = await db.getRedPacket(rpId);
       if (!redPacket) return res.status(404).json({ error: '红包不存在' });
-      // 检查是否已领
-      const claimed = await db.hasClaimedRedPacket(rpId, userId);
+      // 检查是否已领 - 需要用gal_number查询
+      const claimer = await db.getUserById(userId);
+      if (!claimer) return res.status(400).json({ error: '用户不存在' });
+      const claimed = await db.hasClaimedRedPacket(rpId, claimer.gal_number);
       if (claimed) return res.status(400).json({ error: '已领取过' });
       // 检查是否领完
       if (redPacket.claimed_count >= redPacket.count) return res.status(400).json({ error: '红包已领完' });
@@ -764,10 +766,10 @@ async function startServer() {
           claimAmount = Math.min(claimAmount, remaining - 0.01 * (remainingCount - 1));
         }
       }
-      // 创建领取记录
-      await db.claimRedPacket(rpId, userId, claimAmount);
+      // 创建领取记录 - 用gal_number（FK约束）
+      await db.claimRedPacket(rpId, claimer.gal_number, claimAmount);
       // 增加余额
-      await db.updateBalance(userId, claimAmount);
+      await db.updateBalance(claimer.gal_number, claimAmount);
       res.json({ success: true, amount: claimAmount, type: redPacket.type, message: redPacket.message });
     } catch (err) {
       console.error('领取红包失败:', err);

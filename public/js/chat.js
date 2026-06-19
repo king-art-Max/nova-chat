@@ -2858,11 +2858,16 @@ Object.assign(Chat, {
     document.getElementById('btn-clear-chat-history')?.addEventListener('click', () => {
       UI.showConfirm('清空聊天记录', '确定要清空所有聊天记录吗？此操作不可恢复。', async () => {
         try {
-          await fetch('/api/chats/' + this.currentChat.id + '/messages', { method: 'DELETE' });
-          document.getElementById('chat-messages').innerHTML = '';
-          this.chatMessages[this.currentChat.id] = [];
-          UI.showToast('聊天记录已清空');
-          panel.classList.add('hidden');
+          const resp = await fetch('/api/chats/' + this.currentChat.id + '/messages', { method: 'DELETE' });
+          const data = await resp.json();
+          if (data.success) {
+            document.getElementById('chat-messages').innerHTML = '';
+            this.chatMessages[this.currentChat.id] = [];
+            UI.showToast('聊天记录已清空');
+            panel.classList.add('hidden');
+          } else {
+            UI.showToast(data.error || '清空失败');
+          }
         } catch(e) { UI.showToast('清空失败'); }
       });
     });
@@ -3373,6 +3378,11 @@ Object.assign(Chat, {
     const member = this.currentChat.members?.find(m => m.id === currentUserId);
     const isAdmin = member && ['owner', 'admin'].includes(member.role);
     
+    // 检查禁言状态
+    if (member && member.is_muted && !isAdmin) {
+      return { allowed: false, reason: 'muted' };
+    }
+    
     // 检查群模式
     if (this.currentChat.groupMode === 'meeting') {
       // 会议群：只有管理员可以发言
@@ -3510,6 +3520,8 @@ Chat.sendMessage = async function() {
   if (!permission.allowed) {
     if (permission.reason === 'meeting') {
       UI.showToast('🔵 会议群模式：只有管理员可以发言');
+    } else if (permission.reason === 'muted') {
+      UI.showToast('🔇 你已被禁言，无法发送消息');
     }
     return;
   }
@@ -3977,14 +3989,13 @@ Object.assign(Chat, {
             userId: Auth.getCurrentUserId()
           });
         } else {
-          const response = await fetch("/api/messages/" + message.id + "/recall", {
-            method: "POST",
+          const response = await fetch(`/api/chats/${this.currentChat?.id}/messages/${message.id}/recall`, {
+            method: 'PUT',
             headers: {
               "Content-Type": "application/json",
               "Authorization": "Bearer " + Auth.getToken()
             },
             body: JSON.stringify({
-              chatId: this.currentChat?.id,
               userId: Auth.getCurrentUserId()
             })
           });
