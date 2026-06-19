@@ -65,6 +65,7 @@ async function startServer() {
       methods: ['GET', 'POST']
     }
   });
+  global._io = io;
 
   app.use(cors());
   app.use(express.json({ limit: '10mb' })); // 支持大图片
@@ -426,23 +427,33 @@ async function startServer() {
     const chatId = parseInt(req.params.id);
     const limit = parseInt(req.query.limit) || 50;
     const offset = parseInt(req.query.offset) || 0;
+    const userId = parseInt(req.query.userId) || 0;
     try {
-      const messages = (await db.getMessages(chatId, limit, offset)).map(m => ({
-        id: m.id,
-        chatId: m.chat_id,
-        senderId: m.sender_id,
-        galNumber: m.gal_number,
-        nickname: m.nickname,
-        avatar: m.avatar,
-        encryptedContent: m.encrypted_content,
-        type: m.type,
-        ttl: m.ttl,
-        burnAfter: m.burn_after || 0,
-        isRecalled: m.is_recalled,
-        readBy: m.read_by,
-        isAnonymous: m.is_anonymous || false,
-        createdAt: m.created_at ? new Date(m.created_at + 'Z').toISOString() : new Date().toISOString()
-      }));
+      // 获取该用户已删除的消息ID列表
+      let deletedIds = [];
+      if (userId) {
+        try { deletedIds = await db.getDeletedMessageIds(userId, chatId); } catch(e) { /* 表可能不存在 */ }
+      }
+      const deletedSet = new Set(deletedIds);
+      
+      const messages = (await db.getMessages(chatId, limit, offset))
+        .filter(m => !deletedSet.has(m.id))
+        .map(m => ({
+          id: m.id,
+          chatId: m.chat_id,
+          senderId: m.sender_id,
+          galNumber: m.gal_number,
+          nickname: m.nickname,
+          avatar: m.avatar,
+          encryptedContent: m.encrypted_content,
+          type: m.type,
+          ttl: m.ttl,
+          burnAfter: m.burn_after || 0,
+          isRecalled: m.is_recalled,
+          readBy: m.read_by,
+          isAnonymous: m.is_anonymous || false,
+          createdAt: m.created_at ? new Date(m.created_at + 'Z').toISOString() : new Date().toISOString()
+        }));
       res.json({ success: true, messages });
     } catch (error) {
       res.status(500).json({ success: false, error: '服务器错误' });
@@ -509,11 +520,19 @@ async function startServer() {
   // 清空聊天记录（删除该聊天下所有消息）
   app.delete('/api/chats/:id/messages', async (req, res) => {
     const chatId = parseInt(req.params.id);
+    const { userId, scope } = req.body; // scope: 'for_me' | 'for_all'
     if (!chatId) {
       return res.status(400).json({ success: false, error: '缺少聊天ID' });
     }
     try {
-      const success = await db.deleteChatMessages(chatId);
+      let success = false;
+      if (scope === 'for_me' && userId) {
+        // 仅清空我设备上的
+        success = await db.deleteChatMessagesForMe(userId, chatId);
+      } else {
+        // 物理清空所有
+        success = await db.deleteChatMessages(chatId);
+      }
       res.json({ success });
     } catch (error) {
       console.error('清空聊天记录错误:', error);
@@ -539,14 +558,62 @@ async function startServer() {
   // 删除消息
   app.delete('/api/messages/:id', async (req, res) => {
     const messageId = parseInt(req.params.id);
+    const { userId, scope } = req.body; // scope: 'for_me' | 'for_all'
     if (!messageId) {
       return res.status(400).json({ success: false, error: '缺少消息ID' });
     }
     try {
-      const success = await db.deleteMessage(messageId);
+      let success = false;
+      if (scope === 'for_me' && userId) {
+        // 仅删除我设备上的
+        success = await db.deleteMessageForMe(userId, messageId);
+      } else if (scope === 'for_all') {
+        // 同时删除对方设备上的（物理删除）
+        success = await db.deleteMessageForAll(messageId);
+        // 通过 socket 通知对方
+        if (success) {
+          // 找到消息所在聊天，通知其他成员
+          const msg = await db.getMessageById ? await db.getMessageById(messageId) : null;
+          if (msg && global._io) {
+            global._io.to('chat_' + msg.chat_id).emit('message-deleted', { messageId, chatId: msg.chat_id });
+          }
+        }
+      } else {
+        // 默认：仅删除我设备上的
+        if (userId) {
+          success = await db.deleteMessageForMe(userId, messageId);
+        } else {
+          success = await db.deleteMessage(messageId);
+        }
+      }
       res.json({ success });
     } catch (error) {
       console.error('删除消息错误:', error);
+      res.status(500).json({ success: false, error: '服务器错误' });
+    }
+  });
+  
+  // 批量删除消息
+  app.post('/api/messages/batch-delete', async (req, res) => {
+    const { userId, messageIds, scope } = req.body;
+    if (!userId || !messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+      return res.status(400).json({ success: false, error: '参数不完整' });
+    }
+    try {
+      let success = false;
+      if (scope === 'for_all') {
+        // 批量物理删除
+        for (const mid of messageIds) {
+          await db.deleteMessageForAll(mid);
+        }
+        success = true;
+      } else {
+        // 批量仅删除我设备上的
+        success = await db.deleteMessagesForMe(userId, messageIds);
+      }
+      res.json({ success });
+    } catch (error) {
+      console.error('批量删除消息错误:', error);
       res.status(500).json({ success: false, error: '服务器错误' });
     }
   });

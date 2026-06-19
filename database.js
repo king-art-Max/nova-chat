@@ -872,9 +872,94 @@ async function getMessages(chatId, limit = 50, offset = 0) {
   );
 }
 
+// 仅删除我设备上的消息（记录到 message_deletions 表）
+async function deleteMessageForMe(userId, messageId) {
+  if (isProduction && pool) {
+    await pool.query(
+      'INSERT INTO message_deletions (user_id, message_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [userId, messageId]
+    );
+  } else {
+    await runSql(
+      'INSERT OR IGNORE INTO message_deletions (user_id, message_id) VALUES (?, ?)',
+      [userId, messageId]
+    );
+  }
+  return true;
+}
+
+// 同时删除对方设备上的消息（物理删除 + 通知对方）
+async function deleteMessageForAll(messageId) {
+  if (isProduction && pool) {
+    const result = await pool.query('DELETE FROM messages WHERE id = $1', [messageId]);
+    // 同时清除相关的删除记录
+    await pool.query('DELETE FROM message_deletions WHERE message_id = $1', [messageId]);
+    return result.rowCount > 0;
+  } else {
+    const result = await runSql('DELETE FROM messages WHERE id = ?', [messageId]);
+    await runSql('DELETE FROM message_deletions WHERE message_id = ?', [messageId]);
+    return result.changes > 0;
+  }
+}
+
+// 兼容旧接口：删除消息（物理删除）
 async function deleteMessage(messageId) {
   const result = await runSql('DELETE FROM messages WHERE id = ?', [messageId]);
   return result.changes > 0;
+}
+
+// 获取用户在某个聊天中已删除的消息ID列表
+async function getDeletedMessageIds(userId, chatId) {
+  if (isProduction && pool) {
+    const result = await pool.query(
+      `SELECT md.message_id FROM message_deletions md
+       JOIN messages m ON md.message_id = m.id
+       WHERE md.user_id = $1 AND m.chat_id = $2`,
+      [userId, chatId]
+    );
+    return result.rows.map(r => r.message_id);
+  } else {
+    const rows = await queryAll(
+      `SELECT md.message_id FROM message_deletions md
+       JOIN messages m ON md.message_id = m.id
+       WHERE md.user_id = ? AND m.chat_id = ?`,
+      [userId, chatId]
+    );
+    return rows.map(r => r.message_id);
+  }
+}
+
+// 批量仅删除我设备上的消息
+async function deleteMessagesForMe(userId, messageIds) {
+  if (!messageIds || messageIds.length === 0) return true;
+  if (isProduction && pool) {
+    const values = messageIds.map(mid => `(${userId}, ${mid})`).join(',');
+    await pool.query(
+      `INSERT INTO message_deletions (user_id, message_id) VALUES ${values} ON CONFLICT DO NOTHING`
+    );
+  } else {
+    for (const mid of messageIds) {
+      await runSql('INSERT OR IGNORE INTO message_deletions (user_id, message_id) VALUES (?, ?)', [userId, mid]);
+    }
+  }
+  return true;
+}
+
+// 清空聊天记录 - 仅我设备上的
+async function deleteChatMessagesForMe(userId, chatId) {
+  if (isProduction && pool) {
+    const msgs = await pool.query('SELECT id FROM messages WHERE chat_id = $1', [chatId]);
+    if (msgs.rows.length > 0) {
+      const values = msgs.rows.map(m => `(${userId}, ${m.id})`).join(',');
+      await pool.query(`INSERT INTO message_deletions (user_id, message_id) VALUES ${values} ON CONFLICT DO NOTHING`);
+    }
+  } else {
+    const msgs = await queryAll('SELECT id FROM messages WHERE chat_id = ?', [chatId]);
+    for (const m of msgs) {
+      await runSql('INSERT OR IGNORE INTO message_deletions (user_id, message_id) VALUES (?, ?)', [userId, m.id]);
+    }
+  }
+  return true;
 }
 
 // 删除联系人
@@ -1305,6 +1390,15 @@ async function createAdditionalTables() {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`); } catch(e) { console.warn('创建meetings表失败:', e.message); }
   
+  // 消息删除记录表（仅删除我设备上的消息）
+  try { await pool.query(`CREATE TABLE IF NOT EXISTS message_deletions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, message_id)
+  )`); } catch(e) { console.warn('创建message_deletions表失败:', e.message); }
+  
   // chats表新增字段
   const chatColumns = [
     ['group_mode', 'VARCHAR(20) DEFAULT \'open\''],
@@ -1350,6 +1444,14 @@ async function createAdditionalTablesSQLite() {
     host_id INTEGER,
     title TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  
+  sqlDb.run(`CREATE TABLE IF NOT EXISTS message_deletions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, message_id)
   )`);
   
   try { sqlDb.run(`ALTER TABLE chats ADD COLUMN group_mode TEXT DEFAULT 'open'`); } catch(e) {}
@@ -1500,3 +1602,8 @@ module.exports.getMeetings = getMeetings;
 module.exports.getStarredContacts = getStarredContacts;
 module.exports.getChatById = getChatById;
 module.exports.getChatByInviteCode = getChatByInviteCode;
+module.exports.deleteMessageForMe = deleteMessageForMe;
+module.exports.deleteMessageForAll = deleteMessageForAll;
+module.exports.getDeletedMessageIds = getDeletedMessageIds;
+module.exports.deleteMessagesForMe = deleteMessagesForMe;
+module.exports.deleteChatMessagesForMe = deleteChatMessagesForMe;

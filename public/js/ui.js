@@ -207,6 +207,20 @@ const UI = {
     ]);
   },
   
+  /** 显示选择弹窗（用于删除方式选择等） */
+  showChoice(title, message, options, onSelect) {
+    const buttons = [
+      { text: '取消', class: 'btn-secondary' },
+      ...options.map(opt => ({
+        text: opt.text,
+        class: opt.class || 'btn-primary',
+        closeOnClick: true,
+        onClick: () => onSelect(opt.value)
+      }))
+    ];
+    this.showModal(title, `<p>${message}</p>`, buttons);
+  },
+  
   /**
    * 显示聊天窗口
    */
