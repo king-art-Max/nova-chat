@@ -1537,14 +1537,14 @@ const Chat = {
       } else {
         // Socket未连接时用HTTP API
         console.warn('Socket未连接，使用HTTP发送');
-        try {
-          await fetch(`/api/chats/${message.chatId}/messages`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(message)
-          });
-        } catch (httpErr) {
-          console.error('HTTP发送失败:', httpErr);
+        const response = await fetch(`/api/chats/${message.chatId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(message)
+        });
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error || 'HTTP发送失败');
         }
       }
       
@@ -1578,7 +1578,7 @@ const Chat = {
         document.getElementById('destroy-timer').classList.add('hidden');
       }
       
-      this.sendStopTyping();
+      try { this.sendStopTyping(); } catch(e) { /* 非关键 */ }
     } catch (error) {
       console.error('发送消息失败:', error);
       UI.showToast('发送失败，请重试');
@@ -1589,6 +1589,7 @@ const Chat = {
    * 发送正在输入状态
    */
   sendTypingStatus() {
+    if (!window.socket || !window.socket.connected) return;
     if (!this.currentChat) return;
     
     window.socket.emit('typing', {
@@ -1608,7 +1609,7 @@ const Chat = {
    * 发送停止输入状态
    */
   sendStopTyping() {
-    if (!this.currentChat) return;
+    if (!this.currentChat || !window.socket || !window.socket.connected) return;
     
     clearTimeout(this.typingTimers[this.currentChat.id]);
     window.socket.emit('stop-typing', {

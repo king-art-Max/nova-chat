@@ -34,13 +34,7 @@ const Auth = {
       console.warn('加密密钥恢复失败，将继续使用基本功能:', e);
     }
     
-    // 不管加密是否恢复成功，都要继续初始化
-    try {
-      initSocket();
-    } catch (e) {
-      console.warn('Socket初始化失败:', e);
-    }
-    
+    // initSocket由App.onLoggedIn统一调用，避免重复创建socket
     UI.showScreen('main-screen');
     App.onLoggedIn();
   },

@@ -26,6 +26,12 @@ function initSocket() {
     if (Auth.isLoggedIn()) {
       socket.emit('user-online', Auth.getCurrentUserId());
     }
+    
+    // 重连后自动重新加入当前聊天室（修复断线重连收不到消息的问题）
+    if (window.Chat && Chat.currentChat) {
+      socket.emit('join-chat', Chat.currentChat.id);
+      console.log('🔌 已重新加入聊天室:', Chat.currentChat.id);
+    }
   });
   
   socket.on('disconnect', () => {
