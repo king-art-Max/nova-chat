@@ -5718,41 +5718,46 @@ ul, ol {
   background: var(--bg-tertiary);
 }
 
+
 /* ==================== 多选删除模式 ==================== */
 .multi-select-toolbar {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
   background: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 100;
+  left: 0;
+  right: 0;
+  z-index: 1000;
 }
-.multi-select-toolbar.active {
-  display: flex;
+.multi-select-toolbar.hidden {
+  display: none;
 }
-#multi-select-count {
+.ms-info {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+.ms-info #ms-count {
   color: var(--accent-blue);
   font-weight: 600;
-}
-.multi-select-actions {
-  display: flex;
-  gap: 8px;
 }
 .message.selectable {
   cursor: pointer;
   transition: all 0.15s;
+  margin-left: 30px;
+  position: relative;
 }
 .message.selectable::before {
   content: '';
   position: absolute;
-  left: -30px;
+  left: -28px;
   top: 50%;
   transform: translateY(-50%);
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border: 2px solid var(--text-muted);
   border-radius: 50%;
   transition: all 0.15s;
@@ -5775,9 +5780,4 @@ ul, ol {
 }
 .btn-danger:hover {
   background: #ff6666;
-}
-
-/* 多选模式下消息左边距给复选框留空间 */
-.message.selectable {
-  margin-left: 30px;
 }
