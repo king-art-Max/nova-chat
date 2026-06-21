@@ -369,9 +369,16 @@ const Chat = {
       if (data.success) {
         const chatList = document.getElementById('chat-list');
         
-        // 分离置顶和非置顶聊天
-        const pinnedChats = data.chats.filter(chat => this.pinnedChats.includes(chat.id));
-        const normalChats = data.chats.filter(chat => !this.pinnedChats.includes(chat.id));
+        // 三级排序：置顶 → 有未读 → 普通，每级内按最新消息时间倒序
+        const sortByTime = (a, b) => {
+          const tA = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : 0);
+          const tB = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : 0);
+          return tB - tA;
+        };
+        const pinnedChats = data.chats.filter(chat => this.pinnedChats.includes(chat.id)).sort(sortByTime);
+        const nonPinned = data.chats.filter(chat => !this.pinnedChats.includes(chat.id));
+        const unreadChats = nonPinned.filter(c => (c.unreadCount || this.unreadCounts?.[c.id] || 0) > 0).sort(sortByTime);
+        const normalChats = nonPinned.filter(c => (c.unreadCount || this.unreadCounts?.[c.id] || 0) === 0).sort(sortByTime);
         
         if (data.chats.length === 0) {
           chatList.innerHTML = `
@@ -391,9 +398,17 @@ const Chat = {
             });
           }
           
+          // 渲染有未读消息的聊天
+          if (unreadChats.length > 0) {
+            html += '<div class="chat-section-header">💬 新消息</div>';
+            unreadChats.forEach(chat => {
+              html += UI.renderChatItem(chat, Auth.getCurrentUserId(), false);
+            });
+          }
+          
           // 渲染普通聊天
           if (normalChats.length > 0) {
-            html += '<div class="chat-section-header">💬 消息</div>';
+            html += '<div class="chat-section-header">消息</div>';
             normalChats.forEach(chat => {
               html += UI.renderChatItem(chat, Auth.getCurrentUserId(), false);
             });
