@@ -362,27 +362,33 @@ const Chat = {
   async loadChatList() {
     if (!Auth.isLoggedIn()) return;
     
+    // 防止并发调用：如果上一次还没完成，直接跳过
+    if (this._loadChatListRunning) return;
+    this._loadChatListRunning = true;
+    
     try {
       const response = await fetch(`/api/chats?userId=${Auth.getCurrentUserId()}`);
       const data = await response.json();
       
-      if (data.success) {
+      if (data.success && data.chats) {
         const chatList = document.getElementById('chat-list');
+        if (!chatList) { this._loadChatListRunning = false; return; }
         
-        // 统一排序：置顶优先，未读靠前，按最新消息时间倒序
+        // 统一排序列表：置顶优先 → 未读靠前 → 时间倒序
+        // 绝不过滤任何聊天，所有chat都显示
         const sortedChats = [...data.chats].sort((a, b) => {
           const aPinned = this.pinnedChats.includes(a.id) ? 1 : 0;
           const bPinned = this.pinnedChats.includes(b.id) ? 1 : 0;
-          if (aPinned !== bPinned) return bPinned - aPinned; // 置顶在前
+          if (aPinned !== bPinned) return bPinned - aPinned;
           const aUnread = (a.unreadCount || this.unreadCounts?.[a.id] || 0) > 0 ? 1 : 0;
           const bUnread = (b.unreadCount || this.unreadCounts?.[b.id] || 0) > 0 ? 1 : 0;
-          if (aUnread !== bUnread) return bUnread - aUnread; // 未读在前
+          if (aUnread !== bUnread) return bUnread - aUnread;
           const tA = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : 0);
           const tB = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : 0);
-          return tB - tA; // 时间倒序
+          return tB - tA;
         });
         
-        if (data.chats.length === 0) {
+        if (sortedChats.length === 0) {
           chatList.innerHTML = `
             <div class="empty-state">
               <p>还没有聊天记录</p>
@@ -435,6 +441,8 @@ const Chat = {
       }
     } catch (error) {
       console.error('加载聊天列表失败:', error);
+    } finally {
+      this._loadChatListRunning = false;
     }
   },
   

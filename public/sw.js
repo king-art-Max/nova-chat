@@ -1,5 +1,5 @@
 // Nova-OS Service Worker v1.0
-const CACHE_NAME = 'nova-os-v1';
+const CACHE_NAME = 'nova-os-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -64,17 +64,25 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // 静态资源 - 缓存优先，后台更新
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      const fetchPromise = fetch(request).then((response) => {
+  // HTML页面 - 网络优先，确保用户总是拿到最新版本
+  if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname.endsWith('.html')) {
+    event.respondWith(
+      fetch(request).then((response) => {
         const clone = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         return response;
-      }).catch(() => cached);
-      
-      return cached || fetchPromise;
-    })
+      }).catch(() => caches.match(request))
+    );
+    return;
+  }
+  
+  // 其他静态资源 - 网络优先+缓存降级，避免旧代码滞留
+  event.respondWith(
+    fetch(request).then((response) => {
+      const clone = response.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+      return response;
+    }).catch(() => caches.match(request))
   );
 });
 
