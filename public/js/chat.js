@@ -1609,7 +1609,11 @@ const Chat = {
       if (voiceTimer) { voiceTimer.classList.remove('hidden'); voiceTimer.textContent = '0:00'; }
       // 显示录音覆盖层
       const overlay = document.getElementById('voice-recording-overlay');
-      if (overlay) overlay.classList.remove('hidden');
+      if (overlay) {
+        overlay.classList.remove('hidden');
+        // 点击覆盖层任意位置停止录音
+        overlay.onclick = () => this.stopRecording();
+      }
       const recTime = document.getElementById('recording-time');
       if (recTime) recTime.textContent = '0:00';
       // 计时
@@ -1695,6 +1699,11 @@ const Chat = {
         burnAfter: this.burnMode ? this.burnSeconds : 0,
         isAnonymous: this.anonymousMode
       };
+      // 记录已发送语音内容hash，防止socket回显重复显示
+      const contentHash = content.substring(0, 100);
+      if (!this._sentVoiceHashes) this._sentVoiceHashes = {};
+      this._sentVoiceHashes[this.currentChat.id] = { hash: contentHash, time: Date.now() };
+      
       try {
         await fetch('/api/chats/' + message.chatId + '/messages', {
           method: 'POST',
@@ -1705,21 +1714,7 @@ const Chat = {
         UI.showToast('发送语音失败');
         return;
       }
-      const localMessage = {
-        id: 'local-' + Date.now(),
-        chatId: message.chatId,
-        senderId: Auth.getCurrentUserId(),
-        galNumber: Auth.currentUser?.galNumber || '',
-        nickname: Auth.currentUser?.nickname || '',
-        encryptedContent: content,
-        type: 'voice',
-        metadata: {duration},
-        createdAt: new Date().toISOString()
-      };
-      if (!this.chatMessages[message.chatId]) this.chatMessages[message.chatId] = [];
-      this.chatMessages[message.chatId].push(localMessage);
-      this.displayMessage(localMessage, true);
-      document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
+      // 不再本地displayMessage，等待socket回显显示（与文字消息一致）
     };
     reader.readAsDataURL(blob);
   },
@@ -2220,6 +2215,16 @@ const Chat = {
   handleNewMessage(message) {
     // 如果是自己发送的消息回显，检查是否需要替换本地临时消息
     if (message.senderId === Auth.getCurrentUserId()) {
+      // 语音消息去重：检查是否刚发送过相同内容
+      if (message.type === 'voice' && this._sentVoiceHashes && this._sentVoiceHashes[message.chatId]) {
+        const sent = this._sentVoiceHashes[message.chatId];
+        const msgContent = (message.encryptedContent || message.encrypted_content || '').substring(0, 100);
+        if (sent.hash === msgContent && (Date.now() - sent.time) < 10000) {
+          // 这是刚发送的语音回显，直接显示这条（替换），不再重复
+          delete this._sentVoiceHashes[message.chatId];
+        }
+      }
+      
       if (this.chatMessages[message.chatId]) {
         const localMsg = this.chatMessages[message.chatId].find(m => 
           m.id && m.id.startsWith('local-') && 
