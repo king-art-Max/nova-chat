@@ -668,7 +668,7 @@ async function getUserByEmail(email) {
 // ==================== 联系人操作 ====================
 
 async function getContacts(userId) {
-  // 查询我发出的请求
+  // 查询我发出的联系人记录（我是user_id，对方是contact_id）
   const sent = await queryAll(
     `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key,
             c.status, c.created_at, 'sent' as direction
@@ -679,7 +679,7 @@ async function getContacts(userId) {
     [userId]
   );
   
-  // 查询我收到的请求
+  // 查询我收到的联系人记录（对方是user_id，我是contact_id）
   const received = await queryAll(
     `SELECT u.id, u.gal_number, u.nickname, u.avatar, u.public_key,
             c.status, c.created_at, 'received' as direction
@@ -690,7 +690,26 @@ async function getContacts(userId) {
     [userId]
   );
   
-  return [...sent, ...received];
+  // 合并去重：同一用户ID只保留一条（优先sent方向，因为sent记录的contact_id是对方）
+  const seen = new Map();
+  for (const c of [...sent, ...received]) {
+    if (!seen.has(c.id)) {
+      seen.set(c.id, c);
+    } else {
+      // 如果已有记录是accepted，且新记录也是accepted，跳过重复
+      // 如果已有记录是pending，新记录也是pending，按direction区分（保留received=对方加我）
+      const existing = seen.get(c.id);
+      if (existing.status === 'accepted' && c.status === 'accepted') {
+        // 都是accepted，去重保留第一条（sent方向）
+        continue;
+      }
+      // pending情况：sent和received方向不同，需要都保留
+      if (existing.status !== c.status || existing.direction !== c.direction) {
+        seen.set(c.id + '_' + c.direction, c);
+      }
+    }
+  }
+  return Array.from(seen.values());
 }
 
 async function addContact(userId, contactGal) {
