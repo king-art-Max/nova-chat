@@ -370,7 +370,7 @@ async function startServer() {
             content: lastMsg.encrypted_content,
             type: lastMsg.type,
             senderId: lastMsg.sender_id,
-            createdAt: lastMsg.created_at ? new Date(lastMsg.created_at + 'Z').toISOString() : null
+            createdAt: lastMsg.created_at ? new Date(typeof lastMsg.created_at === 'string' ? lastMsg.created_at + 'Z' : lastMsg.created_at).toISOString() : null
           } : null,
           unreadCount: unreadCount
         });
@@ -452,7 +452,7 @@ async function startServer() {
           isRecalled: m.is_recalled,
           readBy: m.read_by,
           isAnonymous: m.is_anonymous || false,
-          createdAt: m.created_at ? new Date(m.created_at + 'Z').toISOString() : new Date().toISOString()
+          createdAt: m.created_at ? new Date(typeof m.created_at === 'string' ? m.created_at + 'Z' : m.created_at).toISOString() : new Date().toISOString()
         }));
       res.json({ success: true, messages });
     } catch (error) {

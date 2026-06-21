@@ -1012,13 +1012,22 @@ const Chat = {
       let duration = 0;
       let audioSrc = '';
       let transcript = '';
+      // 尝试从raw解析完整JSON
       try {
         const parsed = JSON.parse(raw);
-        duration = parsed.duration || 0;
+        duration = parseInt(parsed.duration) || 0;
         audioSrc = parsed.content || '';
         transcript = parsed.transcript || '';
       } catch(e) {
-        audioSrc = content || '';
+        // raw解析失败，尝试从content解析（content可能已被第一次解析修改）
+        try {
+          const parsed2 = JSON.parse(content);
+          duration = parseInt(parsed2.duration) || 0;
+          audioSrc = parsed2.content || '';
+          transcript = parsed2.transcript || '';
+        } catch(e2) {
+          audioSrc = content || '';
+        }
       }
       const voiceMsgId = 'voice-' + (message.id || Date.now());
       const durationStr = duration > 0 ? this.formatVoiceDuration(duration) : '0:00';
@@ -1120,7 +1129,7 @@ const Chat = {
           if (src) Chat.togglePlayVoice(voiceEl, src);
         });
       }
-      // 转文字按钮
+      // 转文字按钮 — 支持实时转写和回放转写
       const transcribeBtn = messageEl.querySelector('.voice-transcribe-btn');
       if (transcribeBtn) {
         transcribeBtn.addEventListener('click', (e) => {
@@ -1131,8 +1140,53 @@ const Chat = {
             existingTranscript.style.display = existingTranscript.style.display === 'none' ? '' : 'none';
             return;
           }
-          // 没有转写内容，提示
-          UI.showToast('该语音未携带转写内容（仅录音时支持实时转写）');
+          // 尝试回放转写：用SpeechRecognition对audio元素进行识别
+          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (SpeechRecognition) {
+            UI.showToast('正在转写语音...');
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'zh-CN';
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            let fullTranscript = '';
+            recognition.onresult = (event) => {
+              for (let i = 0; i < event.results.length; i++) {
+                if (event.results[i].isFinal) {
+                  fullTranscript += event.results[i][0].transcript;
+                }
+              }
+            };
+            recognition.onerror = () => {
+              if (!fullTranscript) UI.showToast('转写失败，请稍后重试');
+            };
+            recognition.onend = () => {
+              if (fullTranscript) {
+                // 显示转写结果
+                const transcriptDiv = document.createElement('div');
+                transcriptDiv.className = 'voice-transcript';
+                transcriptDiv.textContent = fullTranscript;
+                voiceEl.parentElement.appendChild(transcriptDiv);
+                transcribeBtn.textContent = '📝';
+              } else {
+                UI.showToast('未识别到语音内容');
+              }
+            };
+            // 先播放音频，同时启动识别
+            const src = Chat._voiceAudioMap && Chat._voiceAudioMap[voiceEl.id];
+            if (src) Chat.togglePlayVoice(voiceEl, src);
+            try { recognition.start(); } catch(e) { UI.showToast('当前浏览器不支持语音转写'); }
+            // 音频结束后停止识别
+            const audioEl = voiceEl.querySelector('audio');
+            if (audioEl) {
+              audioEl.addEventListener('ended', () => {
+                setTimeout(() => { try { recognition.stop(); } catch(e) {} }, 500);
+              });
+            } else {
+              setTimeout(() => { try { recognition.stop(); } catch(e) {} }, 10000);
+            }
+          } else {
+            UI.showToast('当前浏览器不支持语音转文字功能');
+          }
         });
       }
     }
@@ -1582,12 +1636,25 @@ const Chat = {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({audio: true});
       this.audioChunks = [];
-      this.mediaRecorder = new MediaRecorder(stream);
+      // 选择浏览器支持的最佳录音格式（iOS Safari仅支持audio/mp4）
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'audio/webm';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'audio/mp4';
+          if (!MediaRecorder.isTypeSupported(mimeType)) {
+            mimeType = '';  // 使用浏览器默认格式
+          }
+        }
+      }
+      this._recordingMimeType = mimeType || 'audio/webm';
+      const recorderOptions = mimeType ? { mimeType } : {};
+      this.mediaRecorder = new MediaRecorder(stream, recorderOptions);
       this.mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) this.audioChunks.push(e.data);
       };
       this.mediaRecorder.onstop = () => {
-        const blob = new Blob(this.audioChunks, {type: 'audio/webm'});
+        const blob = new Blob(this.audioChunks, {type: this._recordingMimeType});
         this.audioChunks = [];
         const duration = this._lastRecordingDuration || 0;
         const transcript = this._lastRecordingTranscript || '';
@@ -1723,7 +1790,7 @@ const Chat = {
     const existing = element.querySelector('audio');
     if (existing) {
       if (existing.paused) {
-        existing.play();
+        existing.play().catch(() => UI.showToast('播放失败'));
         element.classList.add('playing');
         if (playIcon) playIcon.textContent = '⏸️';
       } else {
@@ -1733,13 +1800,36 @@ const Chat = {
       }
       return;
     }
+    // 将base64 data URL转为Blob URL，兼容性更好
+    let blobUrl = audioUrl;
+    try {
+      if (audioUrl && audioUrl.startsWith('data:')) {
+        const resp = fetch(audioUrl);
+        resp.then(r => r.blob()).then(blob => {
+          blobUrl = URL.createObjectURL(blob);
+          this._createAudioPlayer(element, blobUrl, playIcon);
+        }).catch(() => {
+          // fallback直接用data URL
+          this._createAudioPlayer(element, audioUrl, playIcon);
+        });
+        return;
+      }
+    } catch(e) {}
+    this._createAudioPlayer(element, blobUrl, playIcon);
+  },
+  _createAudioPlayer(element, audioUrl, playIcon) {
     const audio = document.createElement('audio');
     audio.src = audioUrl;
+    audio.preload = 'auto';
     audio.onplay = () => { element.classList.add('playing'); if (playIcon) playIcon.textContent = '⏸️'; };
     audio.onended = () => { element.classList.remove('playing'); if (playIcon) playIcon.textContent = '▶️'; };
-    audio.onerror = () => UI.showToast('音频播放失败');
+    audio.onerror = () => {
+      UI.showToast('音频播放失败，格式可能不受当前浏览器支持');
+      element.classList.remove('playing');
+      if (playIcon) playIcon.textContent = '▶️';
+    };
     element.appendChild(audio);
-    audio.play();
+    audio.play().catch(() => UI.showToast('播放被浏览器阻止'));
   },
   formatFileSize(bytes) { if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / (1024 * 1024)).toFixed(1) + ' MB'; },
   handleMessageBurned(data) {
@@ -3769,6 +3859,9 @@ Object.assign(Chat, {
           const parsed = JSON.parse(message.encryptedContent);
           if (parsed.plain) return parsed.content;
           if (parsed.type === "image") return "[图片]";
+          if (parsed.type === "voice") return parsed.transcript || "[语音消息]";
+          if (parsed.type === "file") return "[文件] " + (parsed.fileName || "");
+          if (parsed.content) return String(parsed.content);
         } else {
           return message.encryptedContent;
         }
