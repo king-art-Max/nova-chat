@@ -369,16 +369,18 @@ const Chat = {
       if (data.success) {
         const chatList = document.getElementById('chat-list');
         
-        // 三级排序：置顶 → 有未读 → 普通，每级内按最新消息时间倒序
-        const sortByTime = (a, b) => {
+        // 统一排序：置顶优先，未读靠前，按最新消息时间倒序
+        const sortedChats = [...data.chats].sort((a, b) => {
+          const aPinned = this.pinnedChats.includes(a.id) ? 1 : 0;
+          const bPinned = this.pinnedChats.includes(b.id) ? 1 : 0;
+          if (aPinned !== bPinned) return bPinned - aPinned; // 置顶在前
+          const aUnread = (a.unreadCount || this.unreadCounts?.[a.id] || 0) > 0 ? 1 : 0;
+          const bUnread = (b.unreadCount || this.unreadCounts?.[b.id] || 0) > 0 ? 1 : 0;
+          if (aUnread !== bUnread) return bUnread - aUnread; // 未读在前
           const tA = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : 0);
           const tB = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : 0);
-          return tB - tA;
-        };
-        const pinnedChats = data.chats.filter(chat => this.pinnedChats.includes(chat.id)).sort(sortByTime);
-        const nonPinned = data.chats.filter(chat => !this.pinnedChats.includes(chat.id));
-        const unreadChats = nonPinned.filter(c => (c.unreadCount || this.unreadCounts?.[c.id] || 0) > 0).sort(sortByTime);
-        const normalChats = nonPinned.filter(c => (c.unreadCount || this.unreadCounts?.[c.id] || 0) === 0).sort(sortByTime);
+          return tB - tA; // 时间倒序
+        });
         
         if (data.chats.length === 0) {
           chatList.innerHTML = `
@@ -389,30 +391,10 @@ const Chat = {
           `;
         } else {
           let html = '';
-          
-          // 渲染置顶聊天
-          if (pinnedChats.length > 0) {
-            html += '<div class="chat-section-header">📌 置顶聊天</div>';
-            pinnedChats.forEach(chat => {
-              html += UI.renderChatItem(chat, Auth.getCurrentUserId(), true);
-            });
-          }
-          
-          // 渲染有未读消息的聊天
-          if (unreadChats.length > 0) {
-            html += '<div class="chat-section-header">💬 新消息</div>';
-            unreadChats.forEach(chat => {
-              html += UI.renderChatItem(chat, Auth.getCurrentUserId(), false);
-            });
-          }
-          
-          // 渲染普通聊天
-          if (normalChats.length > 0) {
-            html += '<div class="chat-section-header">消息</div>';
-            normalChats.forEach(chat => {
-              html += UI.renderChatItem(chat, Auth.getCurrentUserId(), false);
-            });
-          }
+          sortedChats.forEach(chat => {
+            const isPinned = this.pinnedChats.includes(chat.id);
+            html += UI.renderChatItem(chat, Auth.getCurrentUserId(), isPinned);
+          });
           
           chatList.innerHTML = html;
           

@@ -365,14 +365,14 @@ const UI = {
     }
     
     // 未读计数
-    const unreadCount = chat.unreadCount || Chat.unreadCounts?.[chat.id] || 0;
+    const unreadCount = (typeof chat.unreadCount === 'number' && chat.unreadCount > 0) ? chat.unreadCount : (Chat.unreadCounts?.[chat.id] || 0);
     const timeStr = chat.lastMessage?.createdAt ? this.formatTime(chat.lastMessage.createdAt) : (chat.updated_at ? this.formatTime(chat.updated_at) : '');
     
     return `
       <div class="chat-item" data-chat-id="${chat.id}">
         ${this.getAvatar(avatar, isOnline)}
         <div class="chat-item-info">
-          <div class="chat-item-name">${this.escapeHtml(name)}</div>
+          <div class="chat-item-name">${isPinned ? '📌 ' : ''}${this.escapeHtml(name)}</div>
           <div class="chat-item-preview">${this.escapeHtml(preview)}</div>
         </div>
         <div class="chat-item-meta">
